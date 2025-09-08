@@ -1,0 +1,60 @@
+name: Release Windows
+
+on:
+    push:
+        branches: [production]
+
+env:
+    NODE_VERSION: "20"
+
+permissions:
+    contents: write
+
+jobs:
+    prepare:
+        uses: ./.github/workflows/release-prepare.yml
+
+    build-windows:
+        needs: prepare
+        runs-on: windows-latest
+        environment: windows-release # <- separate environment/approvals
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node & pnpm
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+                  cache: "pnpm"
+            - shell: bash
+              run: |
+                  corepack enable
+                  corepack prepare pnpm@latest --activate
+                  pnpm install --frozen-lockfile
+
+            # Optional: Windows code signing (PFX in secrets, base64-encoded)
+            - name: Setup signing (optional)
+              if: ${{ secrets.WIN_CERT_B64 != '' }}
+              shell: bash
+              run: |
+                  echo "$WIN_CERT_B64" | base64 --decode > win-codesign.pfx
+                  echo "CSC_LINK=$(pwd)/win-codesign.pfx" >> $GITHUB_ENV
+                  echo "CSC_KEY_PASSWORD=${WIN_CERT_PASSWORD}" >> $GITHUB_ENV
+              env:
+                  WIN_CERT_B64: ${{ secrets.WIN_CERT_B64 }}
+                  WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+
+            - name: Build Windows artifacts
+              working-directory: apps/frontend
+              shell: bash
+              run: pnpm run build:win
+
+            - name: Upload to release (EXE/NSIS)
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ needs.prepare.outputs.tag }}
+                  files: |
+                      apps/frontend/release/*.exe
+                      apps/frontend/release/*.msi
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

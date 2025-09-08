@@ -1,0 +1,37 @@
+name: Release Prepare
+
+on:
+    workflow_call:
+        outputs:
+            tag:
+                description: "Version tag"
+                value: ${{ jobs.prepare.outputs.tag }}
+            name:
+                description: "Release name"
+                value: ${{ jobs.prepare.outputs.name }}
+
+jobs:
+    prepare:
+        runs-on: ubuntu-latest
+        outputs:
+            tag: ${{ steps.getver.outputs.tag }}
+            name: ${{ steps.getver.outputs.name }}
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Read app version
+              id: getver
+              run: |
+                  VER=$(node -p "require('./apps/frontend/package.json').version")
+                  echo "tag=v$VER"   >> $GITHUB_OUTPUT
+                  echo "name=Time Manager v$VER" >> $GITHUB_OUTPUT
+
+            - name: Create/Update draft release
+              uses: softprops/action-gh-release@v2
+              with:
+                  draft: true
+                  tag_name: ${{ steps.getver.outputs.tag }}
+                  name: ${{ steps.getver.outputs.name }}
+                  generate_release_notes: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -17,7 +17,11 @@
     "lint": "eslint . --ext .js,.mjs",
     "format": "prettier -w .",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
-    "rebuild:sqlite": "npm_config_runtime=electron npm_config_target=38.0.0 npm_config_disturl=https://electronjs.org/headers npm_config_arch=arm64 pnpm rebuild better-sqlite3"
+    "rebuild:sqlite": "npm_config_runtime=electron npm_config_target=38.0.0 npm_config_disturl=https://electronjs.org/headers npm_config_arch=arm64 pnpm rebuild better-sqlite3",
+
+    "build:app": "electron-builder -c electron-builder.yml",
+    "build:mac": "electron-builder -m -c electron-builder.yml",
+    "build:win": "electron-builder -w -c electron-builder.yml"
   },
   "keywords": [],
   "author": "",

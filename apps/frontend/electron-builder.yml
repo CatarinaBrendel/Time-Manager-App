@@ -1,0 +1,32 @@
+appId: com.time.manager
+productName: Time Manager
+directories:
+  output: release
+files:
+  - "electron/**/*"
+  - "renderer/**/*"
+  - "vendor/**"           # if needed; usually not for production builds
+  - "package.json"
+asar: true
+
+extraMetadata:
+  main: "electron/main.js"
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.inherit.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+
+win:
+  target:
+    - nsis
+  artifactName: "${productName}-Setup-${version}-${arch}.${ext}"
+
+# Optional: Linux
+# linux:
+#   target: AppImage
+#   category: Utility

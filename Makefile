@@ -98,3 +98,20 @@ db-query: build
 .PHONY: clean
 clean:
 	$(COMPOSE) down -v
+
+# -------- Production Pipeline --------
+.PHONY: ci
+ci:
+	pnpm ci:prepare && pnpm ci:install && pnpm ci:lint && pnpm ci:build && pnpm ci:test
+
+.PHONY: release-local
+release-local:
+	pnpm ci:build
+	mkdir -p artifacts
+	cp apps/frontend/renderer/index.html artifacts/
+	cp apps/frontend/renderer/bundle.js artifacts/
+	cp apps/frontend/renderer/tailwind.css artifacts/ || true
+	tar -czf artifacts/frontend_bundle.tgz -C artifacts .
+	tar -czf artifacts/sql_migrations.tgz -C apps/frontend/electron/backend/db/migrations .
+	@echo "Artifacts in ./artifacts"
+

@@ -1,0 +1,65 @@
+name: Release
+
+on:
+    push:
+        branches: [production]
+
+permissions:
+    contents: write # needed to create releases
+
+jobs:
+    build-release:
+        # matrix lets you later add windows-latest, macos-latest for full installers
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node & pnpm
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "pnpm"
+
+            - name: Enable pnpm (corepack)
+              run: |
+                  corepack enable
+                  corepack prepare pnpm@latest --activate
+
+            - name: Install
+              run: pnpm install --frozen-lockfile
+
+            - name: Lint
+              run: pnpm -r run lint --if-present
+
+            - name: Build renderer
+              run: pnpm --filter ./apps/frontend run build:js
+
+            - name: Build CSS
+              run: pnpm --filter ./apps/frontend exec tailwindcss -i ./apps/frontend/renderer/input.css -o ./apps/frontend/renderer/tailwind.css --watch=never
+
+            # (Optional) Pack non-GUI bundle for distribution/testing
+            - name: Archive front-end bundle
+              run: |
+                  mkdir -p artifacts
+                  cp apps/frontend/renderer/index.html artifacts/
+                  cp apps/frontend/renderer/bundle.js artifacts/
+                  cp apps/frontend/renderer/tailwind.css artifacts/ || true
+                  tar -czf artifacts/frontend_bundle.tgz -C artifacts .
+
+            # (Optional) Export SQL migrations for ops visibility
+            - name: Archive migrations
+              run: tar -czf artifacts/sql_migrations.tgz -C apps/frontend/electron/backend/db/migrations .
+
+            - name: Create GitHub Release (draft)
+              uses: softprops/action-gh-release@v2
+              with:
+                  draft: true
+                  tag_name: v${{ github.run_number }}
+                  name: "Time Manager v${{ github.run_number }}"
+                  files: |
+                      artifacts/frontend_bundle.tgz
+                      artifacts/sql_migrations.tgz
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

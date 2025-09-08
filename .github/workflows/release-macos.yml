@@ -1,0 +1,55 @@
+name: Release macOS
+
+on:
+    push:
+        branches: [production]
+
+env:
+    NODE_VERSION: "20"
+
+permissions:
+    contents: write
+
+jobs:
+    prepare:
+        uses: ./.github/workflows/release-prepare.yml
+
+    build-macos:
+        needs: prepare
+        runs-on: macos-latest
+        environment: macos-release # <- separate environment/approvals
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Setup Node & pnpm
+              uses: actions/setup-node@v4
+              with:
+                  node-version: ${{ env.NODE_VERSION }}
+                  cache: "pnpm"
+            - run: |
+                  corepack enable
+                  corepack prepare pnpm@latest --activate
+                  pnpm install --frozen-lockfile
+
+            # Optional: codesigning (provide secrets to actually sign)
+            - name: Prepare codesigning (optional)
+              if: ${{ secrets.APPLE_ID != '' }}
+              run: |
+                  echo "CSC_IDENTITY_AUTO=true" >> $GITHUB_ENV
+                  echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
+                  echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" >> $GITHUB_ENV
+                  echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+
+            - name: Build macOS artifacts
+              working-directory: apps/frontend
+              run: pnpm run build:mac
+
+            - name: Upload to release (DMG/ZIP)
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ needs.prepare.outputs.tag }}
+                  files: |
+                      apps/frontend/release/*.dmg
+                      apps/frontend/release/*.zip
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

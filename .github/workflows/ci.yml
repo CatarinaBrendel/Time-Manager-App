@@ -1,0 +1,47 @@
+name: CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+permissions:
+    contents: read
+
+jobs:
+    build-test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node & pnpm
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+                  cache: "pnpm"
+
+            - name: Enable pnpm (corepack)
+              run: |
+                  corepack enable
+                  corepack prepare pnpm@latest --activate
+
+            - name: Install
+              run: pnpm install --frozen-lockfile
+
+            - name: Lint
+              run: pnpm -r run lint --if-present
+
+            - name: Build (renderer only)
+              run: pnpm --filter ./apps/frontend run build:js
+
+            - name: CSS build (non-watch)
+              run: pnpm --filter ./apps/frontend exec tailwindcss -i ./apps/frontend/renderer/input.css -o ./apps/frontend/renderer/tailwind.css --watch=never
+
+            - name: Smoke check migrations (Node only)
+              run: node apps/frontend/electron/backend/db/migrate.js || true
+              # If you want this to fail when migrations break, remove "|| true"
+
+            - name: Tests
+              run: pnpm -r run test --if-present

@@ -6,7 +6,12 @@
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev:frontend": "pnpm --filter ./apps/frontend run dev",
-    "start:frontend": "pnpm --filter ./apps/frontend run start"
+    "start:frontend": "pnpm --filter ./apps/frontend run start",
+    "ci:prepare": "corepack enable && corepack prepare pnpm@latest --activate",
+    "ci:install": "pnpm install --frozen-lockfile",
+    "ci:lint": "pnpm -r run lint --if-present",
+    "ci:test": "pnpm -r run test --if-present",
+    "ci:build": "pnpm --filter ./apps/frontend run build:js && pnpm --filter ./apps/frontend run dev:css -- --watch=never"
   },
   "keywords": [],
   "author": "",
