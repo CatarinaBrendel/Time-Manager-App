@@ -16,20 +16,29 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
 
-            - name: Setup Node & pnpm
+            - name: Setup Node
               uses: actions/setup-node@v4
               with:
-                  node-version: "20"
-                  cache: "pnpm"
+                  node-version: "20" # no cache here
 
-            - name: Enable pnpm (corepack)
+            - name: Enable pnpm via corepack
               run: |
                   corepack enable
                   corepack prepare pnpm@latest --activate
-                  # fallback if corepack not available
-                  if ! command -v pnpm &> /dev/null; then
-                    npm install -g pnpm@9
-                  fi
+                  pnpm -v
+
+            # Cache the pnpm store (now that pnpm exists)
+            - name: Get pnpm store path
+              id: pnpm-store
+              run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+            - name: Cache pnpm store
+              uses: actions/cache@v4
+              with:
+                  path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+                  key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      pnpm-store-${{ runner.os }}-
 
             - name: Install
               run: pnpm install --frozen-lockfile
@@ -45,7 +54,6 @@ jobs:
 
             - name: Smoke check migrations (Node only)
               run: node apps/frontend/electron/backend/db/migrate.js || true
-              # If you want this to fail when migrations break, remove "|| true"
 
             - name: Tests
               run: pnpm -r run test --if-present

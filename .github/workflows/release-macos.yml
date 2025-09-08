@@ -17,21 +17,46 @@ jobs:
     build-macos:
         needs: prepare
         runs-on: macos-latest
-        environment: macos-release # <- separate environment/approvals
+        environment: macos-release
         steps:
             - uses: actions/checkout@v4
 
-            - name: Setup Node & pnpm
+            - name: Setup Node
               uses: actions/setup-node@v4
               with:
-                  node-version: ${{ env.NODE_VERSION }}
-                  cache: "pnpm"
-            - run: |
+                  node-version: ${{ env.NODE_VERSION }} # <-- no cache here
+
+            - name: Enable pnpm via corepack
+              run: |
                   corepack enable
                   corepack prepare pnpm@latest --activate
-                  pnpm install --frozen-lockfile
+                  pnpm -v
 
-            # Optional: codesigning (provide secrets to actually sign)
+            # Optional but recommended for native modules (node-gyp wants Py 3.11)
+            - name: Setup Python 3.11 for node-gyp
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+            - name: Point node-gyp at Python 3.11
+              run: echo "npm_config_python=$(python3 -c 'import sys,sysconfig; print(sys.executable)')" >> $GITHUB_ENV
+
+            # Cache pnpm store (now that pnpm exists)
+            - name: Get pnpm store path
+              id: pnpm-store
+              run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+            - name: Cache pnpm store
+              uses: actions/cache@v4
+              with:
+                  path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+                  key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+                  restore-keys: |
+                      pnpm-store-${{ runner.os }}-
+
+            - name: Install deps
+              run: pnpm install --frozen-lockfile
+
+            # Optional: codesigning (only if you’ve added these env secrets)
             - name: Prepare codesigning (optional)
               if: ${{ secrets.APPLE_ID != '' }}
               run: |
@@ -40,7 +65,7 @@ jobs:
                   echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" >> $GITHUB_ENV
                   echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
 
-            - name: Build macOS artifacts
+            - name: Build macOS artifacts (DMG/ZIP)
               working-directory: apps/frontend
               run: pnpm run build:mac
 
