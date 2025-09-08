@@ -1,17 +1,18 @@
-/* apps/frontend/renderer/input.css */
+@import "@fontsource-variable/inter";
 @import "tailwindcss";
 
-/* Custom palette: Black & Gold Elegance */
+/* Your palette */
 @theme {
-  --color-black: #000000;
+  --color-black: #000;
   --color-oxford-blue: #14213d;
   --color-orange-web: #fca311;
   --color-platinum: #e5e5e5;
-  --color-white: #ffffff;
+  --color-white: #fff;
 
-  /* Optional app “semantic” aliases */
+  /* Semantic aliases */
   --color-brand: var(--color-oxford-blue);
   --color-accent: var(--color-orange-web);
-  --color-bg: var(--color-platinum);
-  --color-surface: var(--color-white);
+
+  /* Typography */
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }

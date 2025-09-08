@@ -1,0 +1,15 @@
+{
+  "name": "time-manager-app",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:frontend": "pnpm --filter ./apps/frontend run dev",
+    "start:frontend": "pnpm --filter ./apps/frontend run start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.15.1"
+}

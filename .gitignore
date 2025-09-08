@@ -1,20 +1,71 @@
-# Ignore every node_modules in the repo (any depth)
+# ------------------------------
+# Node / PNPM / Workspaces
+# ------------------------------
 node_modules/
-
-# Logs
+.pnpm-debug.log*
 npm-debug.log*
-pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.eslintcache
 
-# Build outputs
+# Lockfiles should be committed
+# !package-lock.json
+# !pnpm-lock.yaml
+# !yarn.lock
+
+# ------------------------------
+# Builds / Artifacts
+# ------------------------------
 dist/
 build/
 release/
+coverage/
+out/
+*.log
 
-# macOS
-.DS_Store
+# Electron-builder outputs (redundant with release/, but explicit helps)
+*.dmg
+*.exe
+*.msi
+*.AppImage
+*.snap
+*.deb
+*.rpm
 
-# Vendored Electron (keep the folder, ignore the bundle)
+# ------------------------------
+# Frontend (Electron renderer)
+# ------------------------------
+# esbuild bundle & sourcemap (generated)
+apps/frontend/renderer/bundle.js
+apps/frontend/renderer/bundle.js.map
+
+# OPTIONAL: If you don't want to version the compiled Tailwind CSS
+# (you can remove these two lines if you prefer to commit the CSS)
+apps/frontend/renderer/tailwind.css
+apps/frontend/renderer/tailwind.css.map
+
+# ------------------------------
+# Vendored Electron (we fetch it locally)
+# ------------------------------
 apps/frontend/vendor/electron/
 !apps/frontend/vendor/.keep
+
+# ------------------------------
+# Env / Secrets (adjust as needed)
+# ------------------------------
+.env
+.env.*
+!.env.example
+
+# ------------------------------
+# OS / Editor
+# ------------------------------
+.DS_Store
+Thumbs.db
+
+# VS Code: keep config files if you use them, ignore the rest
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json

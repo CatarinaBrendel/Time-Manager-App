@@ -2,16 +2,33 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Time Manager — Frontend</title>
+    <title>Time Manager</title>
+    <meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';">
     <link rel="stylesheet" href="./tailwind.css">
   </head>
-  <body class="min-h-screen bg-slate-50 text-slate-800">
-    <header class="p-4 bg-slate-900 text-white">Time Manager</header>
-    <main class="p-6">
-      <div class="p-6 rounded-2xl shadow border">
-        <h1 class="text-2xl font-bold">Electron + Tailwind v4 ✅</h1>
-        <p class="text-slate-600">Hot rebuild via Tailwind CLI watcher.</p>
-      </div>
-    </main>
+  <body class="min-h-screen bg-surface text-black font-sans">
+    <div class="grid grid-cols-[240px,1fr] grid-rows-[auto,1fr] h-screen">
+      <!-- Sidebar (can convert later to React too) -->
+      <aside class="row-span-2 bg-brand text-white p-4">
+        <div class="font-bold text-xl mb-6">Time Manager</div>
+        <nav class="space-y-2">
+          <a href="#/timer" class="block px-3 py-2 rounded hover:bg-white/10">Timer</a>
+          <a href="#/tasks" class="block px-3 py-2 rounded hover:bg-white/10">Tasks</a>
+          <a href="#/reports" class="block px-3 py-2 rounded hover:bg-white/10">Reports</a>
+          <a href="#/settings" class="block px-3 py-2 rounded hover:bg-white/10">Settings</a>
+        </nav>
+      </aside>
+
+      <header class="col-start-2 flex items-center justify-between p-4 border-b border-platinum">
+        <div class="text-oxford-blue/70">Black & Gold Elegance</div>
+      </header>
+
+      <!-- React mounts here -->
+      <main id="root" class="col-start-2 p-6 overflow-auto"></main>
+    </div>
+
+    <!-- Load the bundled React code -->
+    <script type="module" src="./bundle.js"></script>
   </body>
 </html>
