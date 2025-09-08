@@ -1,0 +1,20 @@
+# Ignore every node_modules in the repo (any depth)
+node_modules/
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+release/
+
+# macOS
+.DS_Store
+
+# Vendored Electron (keep the folder, ignore the bundle)
+apps/frontend/vendor/electron/
+!apps/frontend/vendor/.keep
