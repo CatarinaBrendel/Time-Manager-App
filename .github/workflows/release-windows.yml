@@ -24,9 +24,8 @@ jobs:
             - name: Setup Node
               uses: actions/setup-node@v4
               with:
-                  node-version: ${{ env.NODE_VERSION }} # no pnpm cache here
+                  node-version: ${{ env.NODE_VERSION }}
 
-            # Enable pnpm via corepack
             - name: Enable pnpm via corepack
               shell: bash
               run: |
@@ -34,16 +33,14 @@ jobs:
                   corepack prepare pnpm@latest --activate
                   pnpm -v
 
-            # Python 3.11 for node-gyp (more reliable than 3.12+)
             - name: Setup Python 3.11
               uses: actions/setup-python@v5
               with:
                   python-version: "3.11"
-            - name: Point node-gyp at Python 3.11
+            - name: Point node-gyp at Python
               shell: bash
               run: echo "npm_config_python=$(python -c 'import sys; print(sys.executable)')" >> $GITHUB_ENV
 
-            # Cache pnpm store (after pnpm exists)
             - name: Get pnpm store path
               id: pnpm-store
               shell: bash
@@ -61,17 +58,25 @@ jobs:
               shell: bash
               run: pnpm install --frozen-lockfile
 
-            # Optional: Windows code signing
-            - name: Setup signing (optional)
-              if: ${{ secrets.WIN_CERT_B64 != '' }}
+            - name: Rebuild native modules for Electron
+              working-directory: apps/frontend
               shell: bash
-              run: |
-                  echo "$WIN_CERT_B64" | base64 --decode > win-codesign.pfx
-                  echo "CSC_LINK=$(pwd)/win-codesign.pfx" >> $GITHUB_ENV
-                  echo "CSC_KEY_PASSWORD=${WIN_CERT_PASSWORD}" >> $GITHUB_ENV
+              run: pnpm exec electron-rebuild -f -w better-sqlite3
+
+            - name: Setup signing (optional)
+              shell: bash
               env:
-                  WIN_CERT_B64: ${{ secrets.WIN_CERT_B64 }}
-                  WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+                  WIN_CERT_B64: ${{ secrets.WIN_CERT_B64 || '' }}
+                  WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD || '' }}
+              run: |
+                  if [ -n "$WIN_CERT_B64" ] && [ -n "$WIN_CERT_PASSWORD" ]; then
+                    echo "$WIN_CERT_B64" | base64 --decode > win-codesign.pfx
+                    echo "CSC_LINK=$(pwd)/win-codesign.pfx" >> $GITHUB_ENV
+                    echo "CSC_KEY_PASSWORD=$WIN_CERT_PASSWORD" >> $GITHUB_ENV
+                    echo "Windows signing: enabled"
+                  else
+                    echo "Windows signing: secrets not present, building unsigned."
+                  fi
 
             - name: Build Windows artifacts (NSIS/MSI)
               working-directory: apps/frontend

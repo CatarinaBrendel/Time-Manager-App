@@ -24,7 +24,7 @@ jobs:
             - name: Setup Node
               uses: actions/setup-node@v4
               with:
-                  node-version: ${{ env.NODE_VERSION }} # <-- no cache here
+                  node-version: ${{ env.NODE_VERSION }}
 
             - name: Enable pnpm via corepack
               run: |
@@ -32,15 +32,13 @@ jobs:
                   corepack prepare pnpm@latest --activate
                   pnpm -v
 
-            # Optional but recommended for native modules (node-gyp wants Py 3.11)
             - name: Setup Python 3.11 for node-gyp
               uses: actions/setup-python@v5
               with:
                   python-version: "3.11"
-            - name: Point node-gyp at Python 3.11
-              run: echo "npm_config_python=$(python3 -c 'import sys,sysconfig; print(sys.executable)')" >> $GITHUB_ENV
+            - name: Point node-gyp at Python
+              run: echo "npm_config_python=$(python3 -c 'import sys; print(sys.executable)')" >> $GITHUB_ENV
 
-            # Cache pnpm store (now that pnpm exists)
             - name: Get pnpm store path
               id: pnpm-store
               run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
@@ -56,14 +54,21 @@ jobs:
             - name: Install deps
               run: pnpm install --frozen-lockfile
 
-            # Optional: codesigning (only if you’ve added these env secrets)
             - name: Prepare codesigning (optional)
-              if: ${{ secrets.APPLE_ID != '' }}
+              env:
+                  APPLE_ID: ${{ secrets.APPLE_ID || '' }}
+                  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+                  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '' }}
               run: |
-                  echo "CSC_IDENTITY_AUTO=true" >> $GITHUB_ENV
-                  echo "APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
-                  echo "APPLE_APP_SPECIFIC_PASSWORD=${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}" >> $GITHUB_ENV
-                  echo "APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+                  if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+                    echo "CSC_IDENTITY_AUTO=true" >> $GITHUB_ENV
+                    echo "APPLE_ID=$APPLE_ID" >> $GITHUB_ENV
+                    echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_APP_SPECIFIC_PASSWORD" >> $GITHUB_ENV
+                    echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> $GITHUB_ENV
+                    echo "Codesign: enabled"
+                  else
+                    echo "Codesign: secrets not present, building unsigned."
+                  fi
 
             - name: Build macOS artifacts (DMG/ZIP)
               working-directory: apps/frontend

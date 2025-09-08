@@ -40,8 +40,12 @@ jobs:
                   restore-keys: |
                       pnpm-store-${{ runner.os }}-
 
-            - name: Install
-              run: pnpm install --frozen-lockfile
+            - name: Install (ignore scripts)
+              run: pnpm install --frozen-lockfile --ignore-scripts
+
+            - name: Rebuild native modules for Electron
+              working-directory: apps/frontend
+              run: pnpm exec electron-rebuild -f -w better-sqlite3
 
             - name: Lint
               run: pnpm -r run lint --if-present
