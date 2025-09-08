@@ -4,21 +4,20 @@
   "description": "",
   "main": "electron/main.js",
   "scripts": {
-    "prestart": "node ./scripts/fetch-electron.mjs",
-    "predev": "node ./scripts/fetch-electron.mjs",
-
-    "dev:css": "pnpm exec tailwindcss -i ./renderer/input.css -o ./renderer/tailwind.css -w",
-    "dev:js": "node ./scripts/build-frontend.mjs --watch",
-
-    "build:js": "node ./scripts/build-frontend.mjs",
-
-    "start": "./vendor/electron/Electron.app/Contents/MacOS/Electron .",
-    "dev:main": "nodemon --watch electron --ext js,json --exec \"./vendor/electron/Electron.app/Contents/MacOS/Electron .\"",
-
+    "fetch:electron": "node ./scripts/fetch-electron.mjs",
+    "prestart": "pnpm run fetch:electron",
+    "predev": "pnpm run fetch:electron",
+    "start": "NODE_ENV=development node ./scripts/run-electron.mjs .",
+    "dev:main": "NODE_ENV=development nodemon --watch electron --ext js,json --exec \"node ./scripts/run-electron.mjs .\"",
     "dev:app": "npm-run-all --parallel dev:main start",
     "dev": "npm-run-all --parallel dev:css dev:js dev:app",
-
-    "dev:cli": "npm-run-all --parallel dev:css dev:js"
+    "dev:css": "pnpm exec tailwindcss -i ./renderer/input.css -o ./renderer/tailwind.css -w",
+    "dev:js": "node ./scripts/build-frontend.mjs --watch",
+    "build:js": "node ./scripts/build-frontend.mjs",
+    "lint": "eslint . --ext .js,.mjs",
+    "format": "prettier -w .",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:sqlite": "npm_config_runtime=electron npm_config_target=38.0.0 npm_config_disturl=https://electronjs.org/headers npm_config_arch=arm64 pnpm rebuild better-sqlite3"
   },
   "keywords": [],
   "author": "",
@@ -28,7 +27,8 @@
     "@eslint/js": "^9.35.0",
     "@tailwindcss/cli": "^4.1.13",
     "autoprefixer": "^10.4.21",
-    "electron": "38.0.0",
+    "electron": "38",
+    "electron-rebuild": "^3.2.9",
     "esbuild": "^0.25.9",
     "eslint": "^9.35.0",
     "eslint-config-prettier": "^10.1.8",

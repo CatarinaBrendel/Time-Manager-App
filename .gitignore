@@ -1,52 +1,84 @@
 # ------------------------------
-# Docker / Infra (keep Compose files)
+# Node / PNPM / Workspaces
 # ------------------------------
-infra/*.env
-infra/.env
-docker-compose.override.yml
-.docker/
-.tmp_docker/
+node_modules/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Lockfiles should be committed
+!package-lock.json
+!pnpm-lock.yaml
+!yarn.lock
 
 # ------------------------------
-# SQLite runtime artifacts (if DBs live in repo paths)
+# Builds / Artifacts
+# ------------------------------
+dist/
+build/
+release/
+coverage/
+out/
+*.log
+
+# Electron-builder outputs (redundant with release/, but explicit helps)
+*.dmg
+*.exe
+*.msi
+*.AppImage
+*.snap
+*.deb
+*.rpm
+
+# ------------------------------
+# Frontend (Electron renderer)
+# ------------------------------
+# esbuild bundle & sourcemap (generated)
+apps/frontend/renderer/bundle.js
+apps/frontend/renderer/bundle.js.map
+
+# OPTIONAL: If you don't want to version the compiled Tailwind CSS
+# (you can remove these two lines if you prefer to commit the CSS)
+apps/frontend/renderer/tailwind.css
+apps/frontend/renderer/tailwind.css.map
+
+# ------------------------------
+# Vendored Electron (we fetch it locally)
+# ------------------------------
+apps/frontend/vendor/electron/
+!apps/frontend/vendor/.keep
+
+# ------------------------------
+# Env / Secrets (adjust as needed)
+# ------------------------------
+.env
+.env.*
+!.env.example
+
+# ------------------------------
+# OS / Editor
+# ------------------------------
+.DS_Store
+Thumbs.db
+
+# VS Code: keep config files if you use them, ignore the rest
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ------------------------------
+# PNPM store (local cache, never commit)
+# ------------------------------
+.pnpm-store/
+**/.pnpm-store/
+
+# ------------------------------
+# SQLite runtime artifacts
 # ------------------------------
 *.db
 *.db-shm
 *.db-wal
-apps/frontend/electron/backend/**/data/*.db*
-apps/frontend/electron/backend/**/data/*-journal
-
-# ------------------------------
-# Build caches / tooling
-# ------------------------------
-.parcel-cache/
-.esbuild/
-.cache/
-.nyc_output/
-.turbo/
-*.tsbuildinfo
-
-# ------------------------------
-# Test runners / E2E
-# ------------------------------
-playwright-report/
-test-results/
-.cypress/
-cypress/videos/
-cypress/screenshots/
-
-# ------------------------------
-# Editors / IDEs
-# ------------------------------
-.idea/
-.fleet/
-*.iml
-.history/
-.vscode/.tsbuildinfo
-
-# ------------------------------
-# Archives / misc
-# ------------------------------
-*.tgz
-*.swp
-*~
