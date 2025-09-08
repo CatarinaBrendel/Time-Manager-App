@@ -26,6 +26,10 @@ jobs:
               run: |
                   corepack enable
                   corepack prepare pnpm@latest --activate
+                  # fallback if corepack not available
+                  if ! command -v pnpm &> /dev/null; then
+                    npm install -g pnpm@9
+                  fi
 
             - name: Install
               run: pnpm install --frozen-lockfile
