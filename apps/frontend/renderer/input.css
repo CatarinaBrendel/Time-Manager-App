@@ -1,1 +1,17 @@
+/* apps/frontend/renderer/input.css */
 @import "tailwindcss";
+
+/* Custom palette: Black & Gold Elegance */
+@theme {
+  --color-black: #000000;
+  --color-oxford-blue: #14213d;
+  --color-orange-web: #fca311;
+  --color-platinum: #e5e5e5;
+  --color-white: #ffffff;
+
+  /* Optional app “semantic” aliases */
+  --color-brand: var(--color-oxford-blue);
+  --color-accent: var(--color-orange-web);
+  --color-bg: var(--color-platinum);
+  --color-surface: var(--color-white);
+}
