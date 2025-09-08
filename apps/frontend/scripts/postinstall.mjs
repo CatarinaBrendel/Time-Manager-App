@@ -1,20 +1,16 @@
-// Skip electron-rebuild on CI and on Linux; only run locally on macOS/Windows if desired.
-// We keep a manual script `pnpm run rebuild:native` for when you need it.
-
+// Skip native rebuilds on CI and Linux
 const isCI = process.env.CI === 'true';
 const isLinux = process.platform === 'linux';
-
 if (isCI || isLinux) {
   console.log('[postinstall] Skipping electron-rebuild (CI or Linux).');
   process.exit(0);
 }
 
-// Optional: auto-rebuild on developer machines (macOS/Windows)
-// Comment out if you prefer manual control.
+// Optional: run rebuild locally on macOS/Windows
 import { spawnSync } from 'node:child_process';
-console.log('[postinstall] Running electron-rebuild for better-sqlite3...');
+console.log('[postinstall] Rebuilding better-sqlite3 for Electron...');
 const r = spawnSync('pnpm', ['exec', 'electron-rebuild', '-f', '-w', 'better-sqlite3'], { stdio: 'inherit' });
 if (r.status !== 0) {
-  console.warn('[postinstall] electron-rebuild failed; you can retry with "pnpm run rebuild:native".');
-  process.exit(0); // don’t block installs
+  console.warn('[postinstall] electron-rebuild failed; retry with "pnpm run rebuild:native".');
+  process.exit(0);
 }

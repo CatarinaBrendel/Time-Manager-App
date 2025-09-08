@@ -51,24 +51,19 @@ jobs:
                   restore-keys: |
                       pnpm-store-${{ runner.os }}-
 
+            - name: Clean previous Electron headers/cache
+              run: |
+                  rm -rf ~/.electron-gyp
+                  rm -rf node_modules/.cache
+
             - name: Install deps
               run: pnpm install --frozen-lockfile
 
-            - name: Prepare codesigning (optional)
-              env:
-                  APPLE_ID: ${{ secrets.APPLE_ID || '' }}
-                  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-                  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '' }}
-              run: |
-                  if [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
-                    echo "CSC_IDENTITY_AUTO=true" >> $GITHUB_ENV
-                    echo "APPLE_ID=$APPLE_ID" >> $GITHUB_ENV
-                    echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_APP_SPECIFIC_PASSWORD" >> $GITHUB_ENV
-                    echo "APPLE_TEAM_ID=$APPLE_TEAM_ID" >> $GITHUB_ENV
-                    echo "Codesign: enabled"
-                  else
-                    echo "Codesign: secrets not present, building unsigned."
-                  fi
+            - name: Rebuild native modules for Electron
+              working-directory: apps/frontend
+              run: pnpm exec electron-rebuild -f -w better-sqlite3
+
+            # (Signing temporarily removed)
 
             - name: Build macOS artifacts (DMG/ZIP)
               working-directory: apps/frontend

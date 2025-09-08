@@ -40,6 +40,12 @@ jobs:
                   restore-keys: |
                       pnpm-store-${{ runner.os }}-
 
+            - name: Clean previous Electron headers/cache (one-time if needed)
+              if: always()
+              run: |
+                  rm -rf ~/.electron-gyp
+                  rm -rf node_modules/.cache
+
             - name: Install (ignore scripts)
               run: pnpm install --frozen-lockfile --ignore-scripts
 

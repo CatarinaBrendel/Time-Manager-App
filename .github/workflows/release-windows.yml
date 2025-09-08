@@ -54,6 +54,12 @@ jobs:
                   restore-keys: |
                       pnpm-store-${{ runner.os }}-
 
+            - name: Clean previous Electron headers/cache
+              shell: bash
+              run: |
+                  rm -rf ~/.electron-gyp
+                  rm -rf node_modules/.cache
+
             - name: Install deps
               shell: bash
               run: pnpm install --frozen-lockfile
@@ -63,20 +69,7 @@ jobs:
               shell: bash
               run: pnpm exec electron-rebuild -f -w better-sqlite3
 
-            - name: Setup signing (optional)
-              shell: bash
-              env:
-                  WIN_CERT_B64: ${{ secrets.WIN_CERT_B64 || '' }}
-                  WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD || '' }}
-              run: |
-                  if [ -n "$WIN_CERT_B64" ] && [ -n "$WIN_CERT_PASSWORD" ]; then
-                    echo "$WIN_CERT_B64" | base64 --decode > win-codesign.pfx
-                    echo "CSC_LINK=$(pwd)/win-codesign.pfx" >> $GITHUB_ENV
-                    echo "CSC_KEY_PASSWORD=$WIN_CERT_PASSWORD" >> $GITHUB_ENV
-                    echo "Windows signing: enabled"
-                  else
-                    echo "Windows signing: secrets not present, building unsigned."
-                  fi
+            # (Signing temporarily removed)
 
             - name: Build Windows artifacts (NSIS/MSI)
               working-directory: apps/frontend
