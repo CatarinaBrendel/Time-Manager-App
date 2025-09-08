@@ -1,0 +1,8 @@
+# Keep the image small
+.node_modules
+**/node_modules
+dist
+build
+release
+.DS_Store
+.git

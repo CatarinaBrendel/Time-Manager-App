@@ -1,6 +1,7 @@
 // electron/main.js
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const { initBackend } = require('./backend/index');
 
 function createWindow () {
   const win = new BrowserWindow({
@@ -13,5 +14,7 @@ function createWindow () {
   });
   win.loadFile(path.join(__dirname, '../renderer/index.html'));
 }
-app.whenReady().then(createWindow);
+app.whenReady(
+  initBackend(app, ipcMain)
+).then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

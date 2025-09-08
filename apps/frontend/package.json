@@ -6,16 +6,19 @@
   "scripts": {
     "prestart": "node ./scripts/fetch-electron.mjs",
     "predev": "node ./scripts/fetch-electron.mjs",
+
     "dev:css": "pnpm exec tailwindcss -i ./renderer/input.css -o ./renderer/tailwind.css -w",
     "dev:js": "node ./scripts/build-frontend.mjs --watch",
-    "build:css": "pnpm exec tailwindcss -i ./renderer/input.css -o ./renderer/tailwind.css --minify",
+
     "build:js": "node ./scripts/build-frontend.mjs",
+
     "start": "./vendor/electron/Electron.app/Contents/MacOS/Electron .",
-    "dev": "npm-run-all --parallel dev:css dev:js dev:app",
-    "dev:app": "npm-run-all --parallel dev:main start",
     "dev:main": "nodemon --watch electron --ext js,json --exec \"./vendor/electron/Electron.app/Contents/MacOS/Electron .\"",
-    "lint": "eslint . --ext .js,.mjs",
-    "format": "prettier -w ."
+
+    "dev:app": "npm-run-all --parallel dev:main start",
+    "dev": "npm-run-all --parallel dev:css dev:js dev:app",
+
+    "dev:cli": "npm-run-all --parallel dev:css dev:js"
   },
   "keywords": [],
   "author": "",

@@ -3,4 +3,8 @@ packages:
   - packages/*
 
 onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - '@tailwindcss/oxide'
   - better-sqlite3
+  - electron
+  - esbuild

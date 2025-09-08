@@ -1,0 +1,19 @@
+services:
+    cli:
+        build:
+            context: ..
+            dockerfile: Dockerfile
+            args:
+                NODE_VERSION: "20"
+        volumes:
+            - ../:/workspace:cached
+            - pnpm-store:/home/dev/.local/share/pnpm/store
+        working_dir: /workspace
+        environment:
+            - CI=true
+            - PNPM_HOME=/usr/local/share/pnpm
+            - npm_config_build_from_source=true
+        tty: true
+
+volumes:
+    pnpm-store:
