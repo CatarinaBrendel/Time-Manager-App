@@ -1,0 +1,19 @@
+services:
+    cli:
+        # EITHER build from your dev Dockerfile...
+        build:
+            context: .
+            dockerfile: .devcontainer/Dockerfile
+        # ...OR use a base image if you don't have a Dockerfile:
+        # image: node:20-bullseye
+
+        working_dir: /workspace
+        environment:
+            CI: "1"
+            # remove EV unless you really need it here
+            # EV: ${EV:-}
+
+volumes:
+    pnpm-store:
+    node_modules_root:
+    node_modules_frontend:

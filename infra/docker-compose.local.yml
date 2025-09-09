@@ -1,19 +1,19 @@
 services:
     cli:
-        build:
-            context: ..
-            dockerfile: Dockerfile
-            args:
-                NODE_VERSION: "20"
         volumes:
-            - ../:/workspace:cached
-            - pnpm-store:/home/dev/.local/share/pnpm/store
-        working_dir: /workspace
+            # mount repo (the `.` resolves from the directory where you run docker compose)
+            - .:/workspace
+            # keep pnpm cache & node_modules inside volumes (avoid host/container mixing)
+            - pnpm-store:/home/node/.local/share/pnpm
+            - node_modules_root:/workspace/node_modules
+            - node_modules_frontend:/workspace/apps/frontend/node_modules
+        # add anything you want just for local runs, e.g. extra env, ports, etc.
         environment:
-            - CI=true
-            - PNPM_HOME=/usr/local/share/pnpm
-            - npm_config_build_from_source=true
-        tty: true
+            # if you truly need EV, give it a default to silence the warning:
+            EV: ${EV:-}
 
+# use the same named volumes as root so they merge
 volumes:
     pnpm-store:
+    node_modules_root:
+    node_modules_frontend:

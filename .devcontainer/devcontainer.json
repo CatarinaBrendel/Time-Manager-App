@@ -1,0 +1,8 @@
+{
+  "name": "time-manager-ci-like",
+  "build": { "dockerfile": "Dockerfile" },
+  "workspaceFolder": "/workspace",
+  "postCreateCommand": "corepack enable && corepack prepare pnpm@latest --activate && pnpm -v",
+  "remoteUser": "node",
+  "customizations": { "vscode": { "extensions": ["dbaeumer.vscode-eslint"] } }
+}

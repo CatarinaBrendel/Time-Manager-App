@@ -11,7 +11,7 @@
     "ci:install": "pnpm install --frozen-lockfile",
     "ci:lint": "pnpm -r run lint --if-present",
     "ci:test": "pnpm -r run test --if-present",
-    "ci:build": "pnpm --filter ./apps/frontend run build:js && pnpm --filter ./apps/frontend run dev:css -- --watch=never"
+    "ci:build": "pnpm --filter ./apps/frontend run build:js && pnpm --filter ./apps/frontend run css:once"
   },
   "keywords": [],
   "author": "",

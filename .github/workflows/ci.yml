@@ -66,7 +66,7 @@ jobs:
               run: pnpm --filter ./apps/frontend run build:js
 
             - name: CSS build (non-watch)
-              run: pnpm --filter ./apps/frontend exec tailwindcss -i ./apps/frontend/renderer/input.css -o ./apps/frontend/renderer/tailwind.css --watch=never
+              run: pnpm --filter ./apps/frontend exec tailwindcss -i ./renderer/input.css -o ./renderer/tailwind.css
 
             - name: Smoke check migrations (Node only)
               run: node apps/frontend/electron/backend/db/migrate.js || true
