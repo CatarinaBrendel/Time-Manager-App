@@ -1,7 +1,6 @@
 // scripts/resolve-electron.mjs
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import os from "node:os";
 
 const cwd = process.cwd();
 const destDir = join(cwd, "vendor", "electron");
