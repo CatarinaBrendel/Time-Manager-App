@@ -14,7 +14,7 @@
     "dev:css": "pnpm exec tailwindcss -i ./renderer/input.css -o ./renderer/tailwind.css -w",
     "dev:js": "node ./scripts/build-frontend.mjs --watch",
     "build:js": "node ./scripts/build-frontend.mjs",
-    "lint": "eslint \"src/**/*.{js,jsx,ts,tsx,mjs}\" \"scripts/**/*.mjs\""s,
+    "lint": "eslint \"src/**/*.{js,jsx,ts,tsx,mjs}\" \"scripts/**/*.mjs\"",
     "format": "prettier -w .",
     "postinstall": "node ./scripts/postinstall.mjs",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
