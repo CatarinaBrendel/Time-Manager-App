@@ -27,7 +27,6 @@ jobs:
                   corepack prepare pnpm@latest --activate
                   pnpm -v
 
-            # Cache the pnpm store (now that pnpm exists)
             - name: Get pnpm store path
               id: pnpm-store
               run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
@@ -37,22 +36,28 @@ jobs:
               with:
                   path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
                   key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
-                  restore-keys: |
-                      pnpm-store-${{ runner.os }}-
+                  restore-keys: pnpm-store-${{ runner.os }}-
 
-            - name: Clean previous Electron headers/cache (one-time if needed)
-              if: always()
+            - name: Hard clean
               run: |
-                  rm -rf ~/.electron-gyp
-                  rm -rf node_modules/.cache
+                  rm -rf node_modules
+                  rm -rf ~/.cache/node-gyp ~/.npm/_npx ~/.electron-gyp
 
             - name: Install (allow postinstall)
               run: pnpm install --frozen-lockfile
 
+            - name: Debug versions
+              run: |
+                  node -v
+                  pnpm -v
+                  node -e "console.log('electron devDep:', require('./apps/frontend/package.json').devDependencies?.electron)"
+                  node -e "console.log('better-sqlite3 dep:', require('./apps/frontend/package.json').dependencies?.['better-sqlite3'] || require('./apps/frontend/package.json').devDependencies?.['better-sqlite3'])"
+                  node -e "try{console.log('better-sqlite3 resolved:', require('./apps/frontend/node_modules/better-sqlite3/package.json').version)}catch(e){console.log('better-sqlite3 not found in app folder')}"
+                  pnpm why better-sqlite3 || true
+
             - name: Rebuild native modules for Electron
               working-directory: apps/frontend
-              run: |
-                  pnpm exec electron-rebuild -f -w better-sqlite3 --version 38.0.0
+              run: pnpm dlx @electron/rebuild -v 38.0.0 -f -w better-sqlite3
 
             - name: Lint
               run: pnpm -r run lint --if-present
