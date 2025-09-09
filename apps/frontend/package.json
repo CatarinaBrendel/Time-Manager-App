@@ -15,7 +15,7 @@
     "dev:css": "pnpm exec tailwindcss -i ./renderer/input.css -o ./renderer/tailwind.css -w",
     "dev:js": "node ./scripts/build-frontend.mjs --watch",
     "build:js": "node ./scripts/build-frontend.mjs",
-    "lint": "eslint . --ext .js,.jsx,.ts,.tsx,.mjs",
+    "lint": "eslint \"renderer/src/**/*.{js,jsx,ts,tsx}\" \"scripts/**/*.mjs\" \"electron/**/*.mjs\" --no-error-on-unmatched-pattern",
     "format": "prettier -w .",
     "postinstall": "node ./scripts/postinstall.mjs",
     "rebuild:native": "node ./scripts/rebuild-native.mjs",

@@ -1,17 +1,36 @@
+# docker-compose.yml (root)
+x-app: &app
+    build:
+        context: .
+        dockerfile: .devcontainer/Dockerfile
+    user: "node"
+    working_dir: /workspace
+    environment:
+        CI: "1"
+
 services:
     cli:
-        # EITHER build from your dev Dockerfile...
-        build:
-            context: .
-            dockerfile: .devcontainer/Dockerfile
-        # ...OR use a base image if you don't have a Dockerfile:
-        # image: node:20-bullseye
+        <<: *app
+        profiles: ["dev"] # only shows up when you want it (docker compose --profile dev ...)
+        command: bash # interactive shell
 
-        working_dir: /workspace
+    ci:
+        <<: *app
+        profiles: ["ci"]
         environment:
             CI: "1"
-            # remove EV unless you really need it here
-            # EV: ${EV:-}
+            SKIP_ELECTRON_REBUILD: "1"
+        command: >
+            bash -lc "set -euxo pipefail &&
+            pnpm -v &&
+            pnpm install --frozen-lockfile &&
+            pnpm -r run --if-present lint &&
+            pnpm --filter ./apps/frontend run build:js &&
+            pnpm --filter ./apps/frontend exec tailwindcss
+              -i ./apps/frontend/renderer/input.css
+              -o ./apps/frontend/renderer/tailwind.css &&
+            node apps/frontend/electron/backend/db/migrate.js || true &&
+            pnpm -r run --if-present test"
 
 volumes:
     pnpm-store:

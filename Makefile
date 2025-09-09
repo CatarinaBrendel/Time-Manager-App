@@ -5,11 +5,20 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
+# Allow local overrides without editing this file
+-include .make.local
+
 # ----- Docker Compose files -----
 COMPOSE        := docker compose
 ROOT_COMPOSE   ?= docker-compose.yml
 LOCAL_COMPOSE  ?= infra/docker-compose.local.yml
-SERVICE        ?= cli
+
+# Which services to use by default
+# - SERVICE: interactive/dev tasks (shell, run, install, db-*)
+# - SERVICE_CI: CI pipeline tasks (lint/build/test)
+SERVICE        ?= app
+SERVICE_CI     ?= ci
+
 PNPM_VOL       ?= pnpm-store
 
 # Compose command shortcuts
@@ -32,23 +41,24 @@ check-local:
 	@test -f "$(LOCAL_COMPOSE)" || { echo "Missing $(LOCAL_COMPOSE)"; exit 1; }
 
 # -------- Docker lifecycle (overlay: root + local) --------
-.PHONY: build rebuild up ci ci-detach logs down clean shell
-build: check-root check-local ## Build the Docker image (overlay)
+.PHONY: build rebuild up ci-full ci-detach logs down clean shell
+build: check-root check-local ## Build the Docker image(s) (overlay)
 	$(DC) build
 
-rebuild: check-root check-local ## Rebuild image (no cache, overlay)
+rebuild: check-root check-local ## Rebuild image(s) (no cache, overlay)
 	$(DC) build --no-cache
 
-up: check-root check-local ## Up (build if needed, overlay)
+up: check-root check-local ## Up (build if needed, overlay) for $(SERVICE)
 	$(DC) up --build $(SERVICE)
 
-ci: check-root check-local ## Run CI flow (overlay; stops when service exits)
-	$(DC) up --build --abort-on-container-exit $(SERVICE)
+ci-full: check-root check-local ## Run CI flow (overlay; stops when service exits)
+	$(DC) up --build --abort-on-container-exit $(SERVICE_CI)
+	@echo; printf '\033[32m%s\033[0m\n' '✔ CI finished (container)'; echo
 
 ci-detach: check-root check-local ## Start CI service in background (overlay)
-	$(DC) up -d --build $(SERVICE)
+	$(DC) up -d --build $(SERVICE_CI)
 
-logs: check-root check-local ## Tail logs (overlay)
+logs: check-root check-local ## Tail logs (overlay) for $(SERVICE)
 	$(DC) logs -f $(SERVICE)
 
 down: check-root check-local ## Down (overlay; keep volumes)
@@ -58,7 +68,7 @@ clean: check-root check-local ## Down + remove volumes (incl pnpm cache)
 	-$(DC) down -v --remove-orphans
 	-docker volume rm $(PNPM_VOL) 2>/dev/null || true
 
-shell: check-root check-local ## Shell into service (overlay)
+shell: check-root check-local ## Shell into $(SERVICE) (overlay)
 	$(DC) run --rm --entrypoint bash $(SERVICE)
 
 # -------- Root-only variants (use if you don’t want local overlay) --------
@@ -66,17 +76,17 @@ shell: check-root check-local ## Shell into service (overlay)
 build-root: check-root ## Build (root only)
 	$(DCR) build
 
-up-root: check-root ## Up (root only)
+up-root: check-root ## Up (root only) for $(SERVICE)
 	$(DCR) up --build $(SERVICE)
 
 run-root: check-root ## Run one-off (root only): make run-root CMD='pnpm -v'
 	@if [ -z "$(CMD)" ]; then echo "Usage: make run-root CMD='your command'"; exit 1; fi
 	$(DCR) run --rm $(SERVICE) bash -lc "$(CMD)"
 
-shell-root: check-root ## Shell (root only)
+shell-root: check-root ## Shell (root only) for $(SERVICE)
 	$(DCR) run --rm --entrypoint bash $(SERVICE)
 
-logs-root: check-root ## Logs (root only)
+logs-root: check-root ## Logs (root only) for $(SERVICE)
 	$(DCR) logs -f $(SERVICE)
 
 down-root: check-root ## Down (root only)
@@ -84,7 +94,7 @@ down-root: check-root ## Down (root only)
 
 # -------- One-offs inside container (overlay by default) --------
 .PHONY: cli run install dev-cli
-cli: build ## Open a shell inside the CLI container (overlay)
+cli: build ## Open a shell inside $(SERVICE) (overlay)
 	$(DC) run --rm $(SERVICE) bash
 
 run: build ## Run a one-off command (overlay): make run CMD='echo hi'
@@ -124,11 +134,10 @@ db-query: build ## Ad-hoc query: make db-query Q='SELECT * FROM foo;'
 	$(DC) run --rm $(SERVICE) bash -lc "sqlite3 -cmd '.headers on' -cmd '.mode column' '$(DB_PATH)' \"$(Q)\""
 
 # -------- Production-ish helpers (host) --------
-.PHONY: ci-host release-local
+.PHONY: ci-host release-local release-verify
 ci-host: ## Run host CI scripts (package.json)
 	pnpm ci:prepare && pnpm ci:install && pnpm ci:lint && pnpm ci:build && pnpm ci:test
 
-.PHONY: release-local
 release-local: ## Build artifacts on host (ensures host-native deps)
 	@set -euo pipefail; \
 	SKIP_ELECTRON_REBUILD=1 pnpm install --frozen-lockfile; \
@@ -151,14 +160,28 @@ release-local: ## Build artifacts on host (ensures host-native deps)
 	echo "  - make release-verify   # preview the archive contents"; \
 	echo
 
-.PHONY: release-verify
 release-verify: ## Preview artifact contents
 	@echo "== frontend_bundle.tgz ==" && tar -tzf artifacts/frontend_bundle.tgz | sed -n '1,50p'
 	@echo
 	@echo "== sql_migrations.tgz ==" && tar -tzf artifacts/sql_migrations.tgz | sed -n '1,50p'
 
+# -------- Lint (container) --------
+.PHONY: ci-lint
+ci-lint: check-root check-local ## Run ESLint in container (overlay)
+	$(DC) run --rm $(SERVICE_CI) \
+	bash -lc 'set -euo pipefail; \
+	  if ! command -v pnpm >/dev/null 2>&1; then \
+	    if command -v corepack >/dev/null 2>&1; then \
+	      corepack enable; corepack prepare pnpm@latest --activate; \
+	    else \
+	      npm i -g pnpm@10; \
+	    fi; \
+	  fi; \
+	  pnpm -v; \
+	  SKIP_ELECTRON_REBUILD=1 pnpm install --frozen-lockfile; \
+	  pnpm -r run --if-present lint'
 
-# -------- Rebuild Electron --------
+# -------- Rebuild Electron native (host) --------
 .PHONY: rebuild-electron
 rebuild-electron: ## Rebuild better-sqlite3 for the vendored Electron (host)
 	@EV="$$(./apps/frontend/vendor/electron/Electron.app/Contents/MacOS/Electron --version | sed 's/^v//')"; \

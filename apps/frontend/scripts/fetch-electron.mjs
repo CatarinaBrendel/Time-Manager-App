@@ -7,10 +7,9 @@
 // Start scripts can keep using macOS path; other OSes will log the binary path.
 
 import { mkdirSync, existsSync, createWriteStream } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { get } from "node:https";
 import { spawnSync } from "node:child_process";
-import os from "node:os";
 
 const VER = "38.0.0";
 const cwd = process.cwd(); // expect to run from apps/frontend
