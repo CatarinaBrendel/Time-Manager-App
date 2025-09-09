@@ -60,7 +60,7 @@ jobs:
               run: pnpm dlx @electron/rebuild -v 38.0.0 -f -w better-sqlite3
 
             - name: Lint
-              run: pnpm -r run lint --if-present
+              run: pnpm -r run --if-present lint
 
             - name: Build (renderer only)
               run: pnpm --filter ./apps/frontend run build:js
@@ -72,4 +72,4 @@ jobs:
               run: node apps/frontend/electron/backend/db/migrate.js || true
 
             - name: Tests
-              run: pnpm -r run test --if-present
+              run: pnpm -r run --if-present test
