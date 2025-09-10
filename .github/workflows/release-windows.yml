@@ -6,6 +6,7 @@ on:
 
 env:
     NODE_VERSION: "20"
+    ELECTRON_VERSION: "38.0.0" # <-- keep in sync with your app
 
 permissions:
     contents: write
@@ -33,7 +34,7 @@ jobs:
                   corepack prepare pnpm@latest --activate
                   pnpm -v
 
-            - name: Setup Python 3.11
+            - name: Setup Python 3.11 (for node-gyp)
               uses: actions/setup-python@v5
               with:
                   python-version: "3.11"
@@ -41,18 +42,15 @@ jobs:
               shell: bash
               run: echo "npm_config_python=$(python -c 'import sys; print(sys.executable)')" >> $GITHUB_ENV
 
-            - name: Get pnpm store path
+            - name: Cache pnpm store
               id: pnpm-store
               shell: bash
               run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-            - name: Cache pnpm store
-              uses: actions/cache@v4
+            - uses: actions/cache@v4
               with:
                   path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
                   key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
-                  restore-keys: |
-                      pnpm-store-${{ runner.os }}-
+                  restore-keys: pnpm-store-${{ runner.os }}-
 
             - name: Clean previous Electron headers/cache
               shell: bash
@@ -64,24 +62,33 @@ jobs:
               shell: bash
               run: pnpm install --frozen-lockfile
 
+            # ⬇️ Build renderer (Vite) so renderer/dist exists
+            - name: Build renderer (Vite)
+              working-directory: apps/frontend
+              shell: bash
+              run: pnpm run build
+
+            # ⬇️ Rebuild native modules against Electron ABI
             - name: Rebuild native modules for Electron
               working-directory: apps/frontend
               shell: bash
-              run: pnpm exec electron-rebuild -f -w better-sqlite3
+              run: pnpm dlx @electron/rebuild -v ${{ env.ELECTRON_VERSION }} -f -w better-sqlite3
 
-            # (Signing temporarily removed)
+            # (Optional) Code signing would go here
 
+            # ⬇️ Build Windows installer(s)
             - name: Build Windows artifacts (NSIS/MSI)
               working-directory: apps/frontend
               shell: bash
               run: pnpm run build:win
 
+            # ⬇️ Upload correct output folder (matches electron-builder.yml: directories.output)
             - name: Upload to release (EXE/MSI)
               uses: softprops/action-gh-release@v2
               with:
                   tag_name: ${{ needs.prepare.outputs.tag }}
                   files: |
-                      apps/frontend/release/*.exe
-                      apps/frontend/release/*.msi
+                      apps/frontend/dist/release/*.exe
+                      apps/frontend/dist/release/*.msi
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
