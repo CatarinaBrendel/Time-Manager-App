@@ -1,30 +1,41 @@
-appId: com.time.manager
+appId: com.yourorg.time-manager
 productName: Time Manager
 directories:
-  output: release
+  app: .                # root of your Electron app
+  output: dist/release              # where installers land
 files:
-  - "electron/**/*"
-  - "renderer/**/*"
-  - "vendor/**"           # if needed; usually not for production builds
-  - "package.json"
-asar: true
-
-extraMetadata:
-  main: "electron/main.js"
-
+  - electron/**                     # main & preload code
+  - renderer/dist/**                # built UI
+  - electron/backend/**             # your backend code (db, etc)
+  - "!renderer/src/**"              # exclude sources
+  - "!renderer/vite.config.js"
+  - "!**/*.map"
+extraResources:
+  - from: electron/backend/db/migrations
+    to: resources/migrations        # pack migrations alongside app
+    filter:
+      - "**/*"
 mac:
   target:
     - dmg
-    - zip
   category: public.app-category.productivity
-  hardenedRuntime: true
-  entitlements: build/entitlements.mac.inherit.plist
-  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # Build unsigned for local testing (avoid code-sign prompts)
+  identity: null
+  hardenedRuntime: false
+dmg:
+  sign: false                       # skip DMG signing locally
+asar: true
+npmRebuild: false
 
 win:
   target:
-    - nsis
-  artifactName: "${productName}-Setup-${version}-${arch}.${ext}"
+    - nsis           # produces a .exe installer
+  artifactName: "${productName}-${version}-win-${arch}.${ext}"
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+
 
 # Optional: Linux
 # linux:
