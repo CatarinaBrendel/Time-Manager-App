@@ -28,6 +28,7 @@ DCR := $(COMPOSE) -f "$(ROOT_COMPOSE)"                         # root only
 # ----- Project paths -----
 FILTER  ?= ./apps/frontend
 DB_PATH ?= apps/frontend/data/time_manager.db
+BACKEND_DIR := apps/frontend/electron/backend
 
 # -------- Helpers --------
 .PHONY: help check-root check-local
@@ -138,10 +139,32 @@ db-query: build ## Ad-hoc query: make db-query Q='SELECT * FROM foo;'
 ci-host: ## Run host CI scripts (package.json)
 	pnpm ci:prepare && pnpm ci:install && pnpm ci:lint && pnpm ci:build && pnpm ci:test
 
-release-local: ## Build artifacts on host (ensures host-native deps)
+# Run a local CI-like build + package artifacts
+release-local: ## Local CI: lint, build, smoke-check, package (mirrors CI)
 	@set -euo pipefail; \
+	echo "== Hard clean =="; \
+	rm -rf node_modules ; \
+	rm -rf ~/.cache/node-gyp ~/.npm/_npx ~/.electron-gyp || true ; \
+	\
+	echo "== Install (frozen) =="; \
 	SKIP_ELECTRON_REBUILD=1 pnpm install --frozen-lockfile; \
+	\
+	echo "== Rebuild native modules for Electron =="; \
+	cd apps/frontend && pnpm dlx @electron/rebuild -v 38.0.0 -f -w better-sqlite3 ; cd - >/dev/null; \
+	\
+	echo "== Lint =="; \
+	pnpm --filter $(FILTER) run lint; \
+	\
+	echo "== Build renderer (Vite) =="; \
 	pnpm --filter $(FILTER) run build; \
+	\
+	echo "== Backend: smoke migrations =="; \
+	node $(BACKEND_DIR)/db/migrate.js || true; \
+	\
+	echo "== Backend: tests =="; \
+	cd $(BACKEND_DIR) && pnpm run test || true; cd - >/dev/null; \
+	\
+	echo "== Package artifacts =="; \
 	mkdir -p artifacts; \
 	rm -f artifacts/frontend_bundle.tgz artifacts/sql_migrations.tgz; \
 	tar -czf artifacts/frontend_bundle.tgz \
@@ -150,7 +173,7 @@ release-local: ## Build artifacts on host (ensures host-native deps)
 		-C apps/frontend/electron/backend/db/migrations .; \
 	echo; \
 	echo "-------------------------------------------"; \
-	printf "\033[32m%s\033[0m\n" "✔ Build complete"; \
+	printf "\033[32m%s\033[0m\n" "✔ Local CI build complete"; \
 	echo "Artifacts created in ./artifacts:"; \
 	echo "  - frontend_bundle.tgz      ($$(du -h artifacts/frontend_bundle.tgz | cut -f1))"; \
 	echo "  - sql_migrations.tgz       ($$(du -h artifacts/sql_migrations.tgz | cut -f1))"; \

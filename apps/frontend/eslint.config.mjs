@@ -1,5 +1,7 @@
-import js from '@eslint/js'
-import globals from 'globals'
+import js from "@eslint/js";
+import globals from "globals";
+import react from "eslint-plugin-react";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   // Ignore junk & outputs (flat config replaces .eslintignore)
@@ -45,10 +47,11 @@ export default [
       'no-console': 'off',
       'no-constant-condition': ['warn', { checkLoops: false }],
       'no-prototype-builtins': 'off',
-      'react/react-in-jsx-scope': "off",
-      'react/jsx-uses-react': "off",
-      'react-hooks/rules-of-hooks': "error",
-      'react-hooks/exhaustive-deps': "warn",
+      "react/jsx-uses-vars": "error",
+      "react/jsx-uses-react": "off",
+      "react/react-in-jsx-scope": "off",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
     },
   },
 ]
