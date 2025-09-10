@@ -120,19 +120,46 @@ fetch-electron: ## Fetch Electron binaries on host
 	pnpm --filter $(FILTER) run fetch:electron
 
 # -------- SQLite helpers (inside container; overlay) --------
-.PHONY: db-shell db-tables db-schema db-query
-db-shell: build ## Open sqlite3 shell for dev DB (container)
-	$(DC) run --rm $(SERVICE) bash -lc "sqlite3 '$(DB_PATH)'"
+.PHONY: db-tables db-schema db-which db-exec db-query db-diagnose
 
-db-tables: build ## List tables
-	$(DC) run --rm $(SERVICE) bash -lc "sqlite3 '$(DB_PATH)' '.tables'"
+db-tables: check-root check-local ## List tables (inside Docker)
+	COMPOSE_PROFILES=dev $(DC) run --rm --user root $(SERVICE) \
+	bash -lc "apt-get update -qq && apt-get install -y -qq sqlite3 && \
+	          sqlite3 -readonly '$(DB_PATH)' '.tables'"
 
-db-schema: build ## Show full schema (CREATE statements)
-	$(DC) run --rm $(SERVICE) bash -lc "sqlite3 '$(DB_PATH)' '.schema'"
+db-schema: check-root check-local ## Show full schema (inside Docker)
+	COMPOSE_PROFILES=dev $(DC) run --rm --user root $(SERVICE) \
+	bash -lc "apt-get update -qq && apt-get install -y -qq sqlite3 && \
+	          sqlite3 -readonly '$(DB_PATH)' '.schema'"
 
-db-query: build ## Ad-hoc query: make db-query Q='SELECT * FROM foo;'
+db-which: check-root check-local
+	COMPOSE_PROFILES=dev $(DC) run --rm --user root $(SERVICE) \
+	bash -lc "apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null && \
+	          sqlite3 -readonly '$(DB_PATH)' 'PRAGMA database_list;'"
+
+db-exec: check-root check-local ## Write query inside Docker: make db-exec SERVICE=cli Q="INSERT ..."
+	COMPOSE_PROFILES=dev $(DC) run --rm --user root -e SQL="$(Q)" $(SERVICE) \
+	bash -lc "apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null && \
+	          su node -s /bin/bash -lc 'cd /workspace && printf %s \"\$$SQL\" | sqlite3 \"$(DB_PATH)\" && echo OK'"
+
+db-query: check-root check-local ## Ad-hoc query: make db-query Q='SELECT * FROM tasks;'
 	@if [ -z "$(Q)" ]; then echo "Usage: make db-query Q='SELECT ...;'" && exit 1; fi
-	$(DC) run --rm $(SERVICE) bash -lc "sqlite3 -cmd '.headers on' -cmd '.mode column' '$(DB_PATH)' \"$(Q)\""
+	COMPOSE_PROFILES=dev $(DC) run --rm --user root $(SERVICE) \
+	bash -lc "apt-get update -qq && apt-get install -y -qq sqlite3 && \
+	          sqlite3 -readonly -cmd '.headers on' -cmd '.mode column' '$(DB_PATH)' \"$(Q)\""
+
+db-diagnose: check-root check-local ## One-shot: path, journal, insert, count
+	COMPOSE_PROFILES=dev $(DC) run --rm --user root $(SERVICE) \
+	bash -lc "apt-get update -qq && apt-get install -y -qq sqlite3 >/dev/null && \
+	          su node -s /bin/bash -lc 'cd /workspace && \
+	            sqlite3 -echo -bail \"$(DB_PATH)\" \
+	              \"PRAGMA database_list; \
+	               PRAGMA journal_mode; \
+	               SELECT COUNT(*) AS before_n FROM tasks; \
+	               INSERT INTO tasks (title, description, status, due_at, tags_json) VALUES (\\\"diag insert\\\",\\\"via target\\\",\\\"todo\\\",NULL,\\\"[]\\\"); \
+	               SELECT changes() AS changed; \
+	               SELECT COUNT(*) AS after_n FROM tasks;\"'"
+
 
 # -------- Production-ish helpers (host) --------
 .PHONY: ci-host release-local release-verify

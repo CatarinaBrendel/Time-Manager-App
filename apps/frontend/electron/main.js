@@ -1,6 +1,7 @@
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
 
+const {initBackend} = require("./backend");
 const isDev = !!process.env.VITE_DEV_SERVER_URL; // set by your dev script
 
 let win;
@@ -11,11 +12,14 @@ function createWindow() {
     height: 800,
     title: "Time Manager Dashboard",
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: require('node:path').join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-    },
+    }
   });
+
+  const preloadPath = path.join(__dirname, 'preload.js');
+  console.log('[main] preload path:', preloadPath);
 
   if (isDev) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL); // e.g. http://localhost:5173
@@ -26,7 +30,16 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then( () => {
+  try {
+    const { dbPath } = initBackend(app, ipcMain);
+    console.log("Backend ready at", dbPath);
+  } catch (err) {
+    console.error("Failed to init backend:", err);
+  }
+
+  createWindow
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

@@ -1,21 +1,31 @@
-const { TaskCreate, TaskUpdate } = require('../models/task');
-
+// make sure these handlers RETURN what repos.* returns
 function registerTasksIpc(ipcMain, repos) {
-ipcMain.handle('tm.tasks.create', (_e, payload) => {
-const data = TaskCreate.parse(payload);
-const id = repos.tasks.create(data);
-return repos.tasks.get(Number(id));
-});
+  ipcMain.handle('tm.tasks.create', async (_e, payload) => {
+    try {
+      // If you use Zod:
+      // const data = TaskCreate.parse(payload);
+      const row = await repos.tasks.create(payload);
+      return row; // ← important
+    } catch (err) {
+      console.error('[ipc] tm.tasks.create failed:', err);
+      throw err;
+    }
+  });
 
-ipcMain.handle('tm.tasks.update', (_e, payload) => {
-const data = TaskUpdate.parse(payload);
-repos.tasks.update(data);
-return repos.tasks.get(data.id);
-});
+  ipcMain.handle('tm.tasks.update', async (_e, payload) => {
+    try {
+      const row = await repos.tasks.update(payload);
+      return row; // ← important
+    } catch (err) {
+      console.error('[ipc] tm.tasks.update failed:', err);
+      throw err;
+    }
+  });
 
-ipcMain.handle('tm.tasks.get', (_e, id) => repos.tasks.get(Number(id)));
-ipcMain.handle('tm.tasks.list', (_e, { limit = 50, offset = 0 } = {}) => repos.tasks.list(limit, offset));
-ipcMain.handle('tm.tasks.delete', (_e, id) => { repos.tasks.delete(Number(id)); return { ok: true }; });
+  ipcMain.handle('tm.tasks.get', (_e, id) => repos.tasks.get(Number(id)));
+  ipcMain.handle('tm.tasks.list', (_e, { limit = 50, offset = 0 } = {}) =>
+    repos.tasks.list(limit, offset)
+  );
+  ipcMain.handle('tm.tasks.delete', (_e, id) => repos.tasks.delete(Number(id)));
 }
-
 module.exports = { registerTasksIpc };
