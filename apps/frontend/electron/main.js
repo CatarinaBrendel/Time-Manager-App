@@ -1,20 +1,36 @@
-// electron/main.js
-const { app, BrowserWindow, ipcMain } = require('electron');
-const path = require('path');
-const { initBackend } = require('./backend/index');
+const { app, BrowserWindow } = require("electron");
+const path = require("node:path");
 
-function createWindow () {
-  const win = new BrowserWindow({
-    width: 1000,
-    height: 700,
+const isDev = !!process.env.VITE_DEV_SERVER_URL; // set by your dev script
+
+let win;
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    title: "Time Manager Dashboard",
     webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js') // 👈 add this
-    }
+      nodeIntegration: false,
+    },
   });
-  win.loadFile(path.join(__dirname, '../renderer/index.html'));
+
+  if (isDev) {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL); // e.g. http://localhost:5173
+    win.webContents.openDevTools({ mode: "detach" });
+  } else {
+    const indexHtml = path.join(__dirname, "../renderer/dist/index.html");
+    win.loadFile(indexHtml);
+  }
 }
-app.whenReady(
-  initBackend(app, ipcMain)
-).then(createWindow);
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+app.whenReady().then(createWindow);
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});
+app.on("activate", () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});

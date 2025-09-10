@@ -141,12 +141,11 @@ ci-host: ## Run host CI scripts (package.json)
 release-local: ## Build artifacts on host (ensures host-native deps)
 	@set -euo pipefail; \
 	SKIP_ELECTRON_REBUILD=1 pnpm install --frozen-lockfile; \
-	pnpm --filter $(FILTER) run build:js; \
-	pnpm --filter $(FILTER) run css:prod; \
+	pnpm --filter $(FILTER) run build; \
 	mkdir -p artifacts; \
 	rm -f artifacts/frontend_bundle.tgz artifacts/sql_migrations.tgz; \
 	tar -czf artifacts/frontend_bundle.tgz \
-		-C apps/frontend/renderer index.html bundle.js tailwind.css; \
+		-C apps/frontend/renderer/dist .; \
 	tar -czf artifacts/sql_migrations.tgz \
 		-C apps/frontend/electron/backend/db/migrations .; \
 	echo; \
