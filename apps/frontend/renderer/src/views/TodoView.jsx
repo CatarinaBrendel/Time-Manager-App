@@ -26,13 +26,12 @@ const PRIORITY_LABEL = { 2: "High", 1: "Med", 0: "Low" };
 const STATUS_OPTIONS = [
   { key: "all", label: "All" },
   { key: "todo", label: "To-Do" },
-  { key: "in_progress", label: "In Progress" },
+  { key: "in progress", label: "In Progress" },
   { key: "done", label: "Done" },
 ];
 
 // ---- DB <-> UI status mapping ----
-const dbToUiStatus = (s) => (s === "doing" ? "in_progress" : s)|| "todo";
-const uiToDbStatus = (s) => (s === "in_progress" ? "doing" : s);
+const dbToUiStatus = (s) => s || "todo";
 
 // Fill UI-only fields for DB tasks
 function hydrateTask(dbTask = {}) {
@@ -328,8 +327,8 @@ export default function TodoView({ onPickTask }) {
     setLoading(true);
     setErr(null);
     try {
-      const rows = await tasksAPI.list({ limit: 200, offset: 0 });
-      setTasks(rows.map(hydrateTask));
+      const {items} = await tasksAPI.list({ limit: 200, offset: 0 });
+      setTasks(items.map(hydrateTask));
     } catch (e) {
       console.error(e);
       setErr(e?.message || "Failed to load tasks");
@@ -379,7 +378,7 @@ export default function TodoView({ onPickTask }) {
       const t = tasks.find((x) => x.id === id);
       if (!t) return;
       const nextStatus = t.status === "done" ? "todo" : "done";
-      const updated = await tasksAPI.update({ id, status: uiToDbStatus(nextStatus) });
+      const updated = await tasksAPI.update({ id, status: nextStatus });
       setTasks((prev) =>
         prev.map((x) => (x.id === id ? hydrateTask(updated) : x))
       );
@@ -438,7 +437,7 @@ export default function TodoView({ onPickTask }) {
   const counts = useMemo(
     () => ({
       todo: tasks.filter((t) => t.status === "todo").length,
-      in_progress: tasks.filter((t) => t.status === "in_progress").length,
+      "in progress": tasks.filter((t) => t.status === "in progress").length,
       done: tasks.filter((t) => t.status === "done").length,
     }),
     [tasks]
