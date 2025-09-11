@@ -10,12 +10,12 @@ import TaskDetailsCard from "./ui/TaskDetailsCard";
 // import RealTodoView from "./views/TodoView";
 // const ROUTE_COMPONENTS = { todo: RealTodoView };
 const ROUTE_COMPONENTS = {
-  todo: TodoView
+  tasks: TodoView
 }; // none implemented yet
 
 const ROUTE_TITLES = {
   dashboard: "Dashboard",
-  todo: "To-Do",
+  tasks: "Tasks",
   reports: "Reports",
   pomodoro: "Pomodoro",
   settings: "Settings",

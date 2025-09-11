@@ -190,7 +190,7 @@ export default function Sidebar({
  */
 export const defaultSidebarItems = [
   { key: "dashboard", label: "Dashboard", icon: KanbanSquare, href: "#/dashboard" },
-  { key: "todo", label: "To-Do", icon: ListChecks, href: "#/todo" },
+  { key: "tasks", label: "Tasks", icon: ListChecks, href: "#/tasks" },
   { key: "pomodoro", label: "Pomodoro", icon: Timer, href: "#/pomodoro" },
   { key: "reports", label: "Reports", icon: BarChart3, href: "#/reports" },
 ];

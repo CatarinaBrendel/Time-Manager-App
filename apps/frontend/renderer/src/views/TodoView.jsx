@@ -421,8 +421,7 @@ export default function TodoView({ onPickTask }) {
     console.error("Delete failed:", e);
     setErr(e?.message || "Failed to delete task");
   }
-}
-
+  }
 
   async function bulkDelete() {
     try {

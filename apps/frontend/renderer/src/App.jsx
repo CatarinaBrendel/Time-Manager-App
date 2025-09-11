@@ -6,8 +6,38 @@ import HeaderSearch from "./components/HeaderSearch";
 import { Plus, Play, User } from "lucide-react";
 import TimeManagerDashboard from "./TimeManagerDashboard";
 
+// Small hook to keep "today" fresh (updates at next midnight)
+function useWeekday() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tickToMidnight = () => {
+      const n = new Date();
+      const next = new Date(n);
+      next.setHours(24, 0, 0, 0); // next midnight
+      return next.getTime() - n.getTime();
+    };
+    const t = setTimeout(() => {
+      setNow(new Date());
+      // after first midnight tick, keep a daily tick
+      const daily = setInterval(() => setNow(new Date()), 24 * 60 * 60 * 1000);
+      return () => clearInterval(daily);
+    }, tickToMidnight());
+    return () => clearTimeout(t);
+  }, []);
+  const weekdayShort = useMemo(
+    () => now.toLocaleDateString(undefined, { weekday: "short" }),
+    [now]
+  );
+  const weekdayLong = useMemo(
+    () => now.toLocaleDateString(undefined, { weekday: "long" }),
+    [now]
+  );
+  return { weekdayShort, weekdayLong };
+}
+
 export default function App() {
   const [active, setActive] = useState("dashboard");
+  const { weekdayLong } = useWeekday();
 
   useEffect(() => {
     const sync = () => {
@@ -21,6 +51,32 @@ export default function App() {
 
   const items = useMemo(() => defaultSidebarItems, []);
   const footerItems = useMemo(() => defaultFooterItems, []);
+
+  // Central place to define route metadata (title + optional tagline)
+  const routeMeta = useMemo(() => {
+    const map = {
+      dashboard: { title: "Dashboard", tagline: "Focus Sprint" },
+      tasks: { title: "Tasks", tagline: "Track & Triage" },
+      pomodoro: { title: "Pomodoro", tagline: "Sprint, Pause, Achieve" },
+      reports: { title: "Reports", tagline: "Insights" },
+      settings: { title: "Settings", tagline: "Preferences" },
+    };
+
+    // Fallback: try to read the label from the sidebar for unknown keys
+    if (!map[active]) {
+      const fromSidebar = items.find((i) => i.key?.toLowerCase() === active);
+      return {
+        title: fromSidebar?.label || active.charAt(0).toUpperCase() + active.slice(1),
+        tagline: undefined,
+      };
+    }
+    return map[active];
+  }, [active, items]);
+
+  // Keep browser tab title in sync
+  useEffect(() => {
+    document.title = `${routeMeta.title} · ${weekdayLong} · Time Manager`;
+  }, [routeMeta.title, weekdayLong]);
 
   return (
     <div className="h-screen w-screen bg-platinum text-oxford-blue">
@@ -42,9 +98,10 @@ export default function App() {
             height={64}
             left={
               <div className="flex items-center gap-3">
-                <h1 className="truncate text-base font-semibold">Dashboard</h1>
+                <h1 className="truncate text-base font-semibold">{routeMeta.title}</h1>
                 <span className="hidden text-xs text-black/60 sm:inline dark:text-white/60">
-                  Wed · Focus Sprint
+                  {weekdayLong}
+                  {routeMeta.tagline ? ` · ${routeMeta.tagline}` : ""}
                 </span>
               </div>
             }
