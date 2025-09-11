@@ -24,5 +24,5 @@ try {
   });
   console.log('[preload] exposed window.tm');
 } catch(error) {
-  console.error('[preload] expose failed:', e);
+  console.error('[preload] expose failed:', error);
 }

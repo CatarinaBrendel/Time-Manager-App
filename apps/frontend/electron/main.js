@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
 
-const {initBackend} = require("./backend");
+const {initBackend} = require("./backend/index");
 const isDev = !!process.env.VITE_DEV_SERVER_URL; // set by your dev script
 
 let win;
@@ -33,12 +33,11 @@ function createWindow() {
 app.whenReady().then( () => {
   try {
     const { dbPath } = initBackend(app, ipcMain);
-    console.log("Backend ready at", dbPath);
+    console.log("[main] Backend ready at", dbPath);
+    createWindow();
   } catch (err) {
-    console.error("Failed to init backend:", err);
+    console.error("[main] Failed to init backend:", err);
   }
-
-  createWindow
 });
 
 app.on("window-all-closed", () => {

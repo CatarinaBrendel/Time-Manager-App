@@ -26,14 +26,15 @@ DC  := $(COMPOSE) -f "$(ROOT_COMPOSE)" -f "$(LOCAL_COMPOSE)"   # root + local ov
 DCR := $(COMPOSE) -f "$(ROOT_COMPOSE)"                         # root only
 
 # ----- Project paths -----
-FILTER  ?= ./apps/frontend
-DB_PATH ?= apps/frontend/data/time_manager.db
-BACKEND_DIR := apps/frontend/electron/backend
+FILTER       ?= ./apps/frontend
+DB_PATH      ?= apps/frontend/data/time_manager.db
+BACKEND_DIR  := apps/frontend/electron/backend
+FRONTEND_DIR := apps/frontend
 
 # -------- Helpers --------
 .PHONY: help check-root check-local
 help: ## Show this help
-	@awk 'BEGIN{FS=":.*##"; printf "\nTargets:\n"} /^[a-zA-Z0-9_.-]+:.*##/{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN{FS=":.*##"; printf "\nTargets:\n"} /^[a-zA-Z0-9_.-]+:.*##/{printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 check-root:
 	@test -f "$(ROOT_COMPOSE)" || { echo "Missing $(ROOT_COMPOSE)"; exit 1; }
@@ -103,7 +104,7 @@ run: build ## Run a one-off command (overlay): make run CMD='echo hi'
 	$(DC) run --rm $(SERVICE) bash -lc "$(CMD)"
 
 install: build ## pnpm install (inside container, overlay)
-	$(DC) run --rm $(SERVICE) bash -lc "pnpm install"
+	$(DC) run --rm $(SERVICE) bash -lc "pnpm -w install --frozen-lockfile || pnpm -w install"
 
 dev-cli: build ## Watch CSS/JS in container (headless, overlay)
 	$(DC) run --rm $(SERVICE) bash -lc "pnpm --filter $(FILTER) run dev:cli"
@@ -160,13 +161,12 @@ db-diagnose: check-root check-local ## One-shot: path, journal, insert, count
 	               SELECT changes() AS changed; \
 	               SELECT COUNT(*) AS after_n FROM tasks;\"'"
 
-
 # -------- Production-ish helpers (host) --------
 .PHONY: ci-host release-local release-verify
 ci-host: ## Run host CI scripts (package.json)
 	pnpm ci:prepare && pnpm ci:install && pnpm ci:lint && pnpm ci:build && pnpm ci:test
 
-# Run a local CI-like build + package artifacts
+# KEEP THIS EXACTLY AS-IS (GitHub Actions sanity check)
 release-local: ## Local CI: lint, build, smoke-check, package (mirrors CI)
 	@set -euo pipefail; \
 	echo "== Hard clean =="; \
@@ -219,8 +219,8 @@ release-verify: ## Preview artifact contents
 ci-lint: check-root check-local ## Run ESLint in container (overlay)
 	$(DC) run --rm $(SERVICE_CI) \
 	bash -lc 'set -euo pipefail; \
-	  if ! command -v pnpm >/dev/null 2>&1; then \
-	    if command -v corepack >/dev/null 2>&1; then \
+	  if ! command -v pnpm >/dev/null 21; then \
+	    if command -v corepack >/dev/null 21; then \
 	      corepack enable; corepack prepare pnpm@latest --activate; \
 	    else \
 	      npm i -g pnpm@10; \
@@ -231,10 +231,35 @@ ci-lint: check-root check-local ## Run ESLint in container (overlay)
 	  pnpm -r run --if-present lint'
 
 # -------- Rebuild Electron native (host) --------
-.PHONY: rebuild-electron
-rebuild-electron: ## Rebuild better-sqlite3 for the vendored Electron (host)
-	@EV="$$(./apps/frontend/vendor/electron/Electron.app/Contents/MacOS/Electron --version | sed 's/^v//')"; \
+.PHONY: rebuild-electron rebuild-sqlite abi doctor
+rebuild-electron: ## Rebuild better-sqlite3 for Electron (vendor or devDep, auto-detect)
+	@set -euo pipefail; \
+	if [ -x "./$(FRONTEND_DIR)/vendor/electron/Electron.app/Contents/MacOS/Electron" ]; then \
+	  EV="$$(./$(FRONTEND_DIR)/vendor/electron/Electron.app/Contents/MacOS/Electron --version | sed 's/^v//')"; \
+	else \
+	  EV="$$(pnpm --filter $(FILTER) exec electron --version 2>/dev/null | sed 's/^v//')"; \
+	fi; \
+	if [ -z "$$EV" ]; then echo "Electron not found (vendor or devDependency). Run 'pnpm --filter $(FILTER) add -D electron' or 'make fetch-electron'."; exit 1; fi; \
 	echo "Rebuilding for Electron $$EV..."; \
 	ARCH="$$(uname -m)"; [ "$$ARCH" = "x86_64" ] && ARCH=x64 || ARCH=arm64; \
 	rm -rf node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/build; \
 	pnpm dlx @electron/rebuild -v "$$EV" -f -w better-sqlite3 --arch "$$ARCH"
+
+rebuild-sqlite: ## Rebuild better-sqlite3 using package script (dynamic Electron)
+	pnpm --filter $(FILTER) run rebuild:sqlite
+
+abi: ## Print Node/Electron versions and ABI
+	@echo "node:     $$(node -v)"; \
+	echo "pnpm:     $$(pnpm -v)"; \
+	echo "electron: $$(pnpm --filter $(FILTER) exec electron --version 2>/dev/null || echo 'not-installed')"; \
+	echo "ABI:      $$(ELECTRON_RUN_AS_NODE=1 pnpm --filter $(FILTER) exec electron -p \"process.versions.modules\" 2>/dev/null || echo 'n/a')"
+
+doctor: ## Quick env sanity: versions and where better-sqlite3 resolves
+	@set -e; \
+	echo "== Versions =="; \
+	$(MAKE) abi; \
+	echo; \
+	echo "== better-sqlite3 path (node) =="; \
+	node -e "try{console.log(require.resolve('better-sqlite3'))}catch(e){console.log('not found')}" || true; \
+	echo "== better-sqlite3 load under Electron =="; \
+	ELECTRON_RUN_AS_NODE=1 pnpm --filter $(FILTER) exec electron -e "try{require('better-sqlite3');console.log('OK under Electron (ABI='+process.versions.modules+')')}catch(e){console.error(e.message)}" || true
