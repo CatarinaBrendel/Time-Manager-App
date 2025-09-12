@@ -1,8 +1,9 @@
-# Keep the image small
-.node_modules
 **/node_modules
+.git
 dist
 build
 release
+coverage
+apps/frontend/vendor/electron
+*.log
 .DS_Store
-.git

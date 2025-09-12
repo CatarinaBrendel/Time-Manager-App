@@ -166,7 +166,7 @@ db-diagnose: check-root check-local ## One-shot: path, journal, insert, count
 ci-host: ## Run host CI scripts (package.json)
 	pnpm ci:prepare && pnpm ci:install && pnpm ci:lint && pnpm ci:build && pnpm ci:test
 
-# KEEP THIS EXACTLY AS-IS (GitHub Actions sanity check)
+# GitHub Actions sanity check
 release-local: ## Local CI: lint, build, smoke-check, package (mirrors CI)
 	@set -euo pipefail; \
 	echo "== Hard clean =="; \
@@ -263,3 +263,9 @@ doctor: ## Quick env sanity: versions and where better-sqlite3 resolves
 	node -e "try{console.log(require.resolve('better-sqlite3'))}catch(e){console.log('not found')}" || true; \
 	echo "== better-sqlite3 load under Electron =="; \
 	ELECTRON_RUN_AS_NODE=1 pnpm --filter $(FILTER) exec electron -e "try{require('better-sqlite3');console.log('OK under Electron (ABI='+process.versions.modules+')')}catch(e){console.error(e.message)}" || true
+
+# -------- Backend tests with a rebuild --------
+.PHONY: dev-test
+dev-test:
+	docker compose --progress=plain -f docker-compose.test.yml build
+	docker compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from tests

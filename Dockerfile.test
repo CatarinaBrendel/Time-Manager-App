@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1.7
+FROM node:20-bullseye
+
+# toolchain (you already have this earlier if building better-sqlite3)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python-is-python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- Runner: copy manifests & tests, then install ----
+WORKDIR /runner
+COPY apps/frontend/electron/tests/backend-runner/package.json /runner/
+COPY apps/frontend/electron/tests/backend-runner/jest.config.cjs /runner/
+COPY apps/frontend/electron/tests/backend-runner/setup /runner/setup
+COPY apps/frontend/electron/tests/backend-runner/specs /runner/specs
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# install deps for the runner
+RUN --mount=type=cache,id=pnpm-store,target=/root/.pnpm-store \
+    pnpm config set store-dir /root/.pnpm-store && \
+    pnpm install --frozen-lockfile || pnpm install
+
+# ✅ prove jest is installed during build
+RUN node -e "console.log('jest at:', require.resolve('jest/package.json'))" && \
+    ls -la node_modules/.bin | grep -E '^.* jest$'
+
+# 3) Explicitly build better-sqlite3 from source in its package dir
+RUN set -eux; \
+    BDIR=$(node -p "require('path').dirname(require.resolve('better-sqlite3/package.json'))"); \
+    echo "better-sqlite3 dir: $BDIR"; \
+    cd "$BDIR"; \
+    npm_config_build_from_source=1 npm run build-release --unsafe-perm; \
+    echo "Built files:"; \
+    ls -la build/Release || true; \
+    ls -la lib/binding || true
+
+# 4) Build-time smoke to ensure the native addon loads (Node 20 / linux/arm64)
+RUN node -p "process.versions.node + ' ABI=' + process.versions.modules" && \
+    node -e "const Database=require('better-sqlite3'); const db=new Database('/tmp/smoke.db'); db.prepare('select 1').get(); db.close(); console.log('better-sqlite3 OK at build')"
+
+# ---- Bring in the whole repo so tests can import app code ----
+WORKDIR /work
+COPY . /work
+
+# ---- Run tests from /runner ----
+WORKDIR /runner
+CMD ["pnpm","test"]

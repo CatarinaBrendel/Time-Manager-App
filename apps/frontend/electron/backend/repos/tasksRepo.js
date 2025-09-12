@@ -45,14 +45,6 @@ function TasksRepo(db) {
       updated_at   = datetime('now')
     WHERE id = @id
   `);
-
-  const listTagsStmt = db.prepare(`
-    SELECT name
-    FROM tags
-    WHERE LOWER(name) LIKE LOWER(@prefix || '%')
-    ORDER BY name
-    LIMIT @limit
-  `);
     
   const popularTagsStmt = db.prepare(`
     SELECT tg.name, COUNT(*) AS freq
@@ -61,8 +53,7 @@ function TasksRepo(db) {
     GROUP BY tg.id
     ORDER BY freq DESC, tg.name ASC
     LIMIT @limit
-`);
-
+  `);
 
   const baseSelect = `
     SELECT
@@ -322,11 +313,25 @@ function TasksRepo(db) {
 
     listTags(prefix = "", limit = 10) {
       if (!prefix) {
-        // no prefix → just return popular tags
         return this.popularTags(limit).map(t => t.name);
       }
-      return listTagsStmt.all({ prefix, limit }).map(r => r.name);
+      const p = String(prefix).toLowerCase();
+
+      // small table, simple + predictable
+      const names = db.prepare(`SELECT name FROM tags`).all().map(r => r.name || "");
+
+      const out = [];
+      for (const n of names) {
+        if (n.toLowerCase().startsWith(p)) {
+          out.push(n);
+          if (out.length >= limit) break;
+        }
+      }
+      // keep some reasonable order
+      out.sort((a, b) => a.localeCompare(b));
+      return out;
     },
+
 
     popularTags(limit = 10) {
       return popularTagsStmt.all({ limit });

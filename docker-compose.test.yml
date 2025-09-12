@@ -1,0 +1,15 @@
+# docker-compose.test.yml
+services:
+    tests:
+        platform: "linux/arm64"
+        build:
+            context: .
+            dockerfile: Dockerfile.test
+        environment:
+            NODE_ENV: test
+        tty: true
+        volumes:
+            - type: bind
+              source: .
+              target: /work
+              read_only: true
