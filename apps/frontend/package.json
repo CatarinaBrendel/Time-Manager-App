@@ -4,26 +4,27 @@
   "description": "",
   "main": "electron/main.js",
   "scripts": {
-    "fetch:electron": "node ./scripts/fetch-electron.mjs",
-    "prestart": "pnpm run fetch:electron",
-    "start": "electron ./electron/main.js",
-    "dev:renderer": "vite --config renderer/vite.config.js",
-    "dev:electron": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron ./electron/main.js",
     "dev": "npm-run-all -p dev:renderer dev:electron",
-    "dev:main": "NODE_ENV=development nodemon --watch electron --ext js,json --exec \"node ./scripts/run-electron.mjs .\"",
-    "dev:app": "npm-run-all --parallel dev:renderer dev:main",
-    "dev:js": "node ./scripts/build-frontend.mjs --watch",
-    "build:js": "node ./scripts/build-frontend.mjs",
+    "dev:renderer": "vite --config renderer/vite.config.js",
+
+    "predev:electron": "pnpm run prepare:electron",
+    "dev:electron": "cross-env VITE_DEV_SERVER_URL=http://localhost:5173 node ./scripts/run-electron.mjs ./electron/main.js",
+
+    "prestart": "pnpm run prepare:electron",
+    "start": "node ./scripts/run-electron.mjs ./electron/main.js",
+
+    "prepare:electron": "node ./scripts/prepare-electron.mjs",
+    "rebuild:sqlite": "node ./scripts/rebuild-sqlite.mjs",
+    "fetch:electron": "node ./scripts/fetch-electron.mjs",
+
+    "build:renderer": "vite build --config renderer/vite.config.js",
+    "build:app": "pnpm dlx electron-builder -c electron-builder.yml",
+    "build:mac": "pnpm dlx electron-builder -m -c electron-builder.yml",
+    "build:win": "pnpm dlx electron-builder -w -c electron-builder.yml",
+
     "lint": "eslint \"renderer/src/**/*.{js,jsx,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"electron/**/*.{js,mjs}\" --no-error-on-unmatched-pattern",
     "format": "prettier -w .",
     "postinstall": "node ./scripts/postinstall.mjs",
-    "rebuild:native": "node ./scripts/rebuild-native.mjs",
-    "rebuild:sqlite": "node ./scripts/rebuild-sqlite.mjs",
-    "build:renderer": "vite build --config renderer/vite.config.js",
-    "build:mac": "pnpm dlx electron-builder -m -c electron-builder.yml",
-    "build:win": "pnpm dlx electron-builder -w -c electron-builder.yml",
-    "build:app": "pnpm dlx electron-builder -c electron-builder.yml",
-    "build": "npm run build:renderer",
     "health": "node -e \"console.log({ node:process.version, pnpm:require('child_process').execSync('pnpm -v').toString().trim(), electron:(()=>{try{return require('electron/package.json').version}catch{ return 'not-installed'}})(), abi:process.versions.modules })\""
   },
   "keywords": [],

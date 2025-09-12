@@ -110,15 +110,17 @@ dev-cli: build ## Watch CSS/JS in container (headless, overlay)
 	$(DC) run --rm $(SERVICE) bash -lc "pnpm --filter $(FILTER) run dev:cli"
 
 # -------- Host (macOS) dev with GUI Electron --------
-.PHONY: dev start fetch-electron
-dev: ## Run full dev on host (GUI Electron + watch)
+.PHONY: dev start prepare-dev rebuild-sqlite
+
+dev: ## GUI dev (Vite + Electron)
 	pnpm --filter $(FILTER) run dev
 
-start: ## Start Electron on host
+start: ## Start Electron app
 	pnpm --filter $(FILTER) run start
 
-fetch-electron: ## Fetch Electron binaries on host
-	pnpm --filter $(FILTER) run fetch:electron
+# Only if you need to run Node-only code that imports better-sqlite3
+rebuild-sqlite: ## Rebuild better-sqlite3 for host Node ABI
+	pnpm --filter $(FILTER) run rebuild:sqlite
 
 # -------- SQLite helpers (inside container; overlay) --------
 .PHONY: db-tables db-schema db-which db-exec db-query db-diagnose
