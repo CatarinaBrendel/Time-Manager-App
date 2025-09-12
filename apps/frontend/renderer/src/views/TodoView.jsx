@@ -9,9 +9,11 @@ import {
   Flag,
   CheckCircle2,
   Circle,
-  Trash2
+  Trash2,
+  Pencil
 } from "lucide-react";
 import { tasksAPI } from "../lib/taskAPI";
+import { useToast } from "../ui/ToastProvider";
 
 // ------- Mock projects (UI only) -------
 const projects = [
@@ -22,7 +24,7 @@ const projects = [
 
 const cx = (...c) => c.filter(Boolean).join(" ");
 const getProject = (id) => projects.find((p) => p.id === id);
-const PRIORITY_LABEL = { 2: "High", 1: "Med", 0: "Low" };
+const PRIORITY_LABEL = { 0: "Low", 1: "Med", 2: "High", 3: "Urgent" };
 const STATUS_OPTIONS = [
   { key: "all", label: "All" },
   { key: "todo", label: "To-Do" },
@@ -35,6 +37,13 @@ const dbToUiStatus = (s) => s || "todo";
 
 // Fill UI-only fields for DB tasks
 function hydrateTask(dbTask = {}) {
+  const uiPriorityByLabel = { low: 0, medium: 1, high: 2, urgent: 3 };
+  const uiPriority =
+    uiPriorityByLabel[String(dbTask.priority || "").toLowerCase()] ??
+    // fallback via weight (lower weight = higher priority)
+    (Number.isFinite(dbTask.priority_weight) ? Math.max(0, 3 - Number(dbTask.priority_weight)) : 0);
+
+  
   // Accept tags from various shapes: array | stringified JSON | null/undefined
   let raw = dbTask.tags ?? dbTask.tags_json ?? [];
   let tags;
@@ -58,14 +67,14 @@ function hydrateTask(dbTask = {}) {
 
     // UI-only placeholders (until schema supports them)
     projectId: "",
-    priority: 0,
+    priority: uiPriority,
     etaMin: 15,
   };
 }
 
 
 function PriorityDot({ p }) {
-  const map = { 0: "bg-gray-300", 1: "bg-accent", 2: "bg-red-500" };
+  const map = { 0: "bg-gray-300", 1: "bg-accent", 2: "bg-red-500", 3:"bg-black" };
   return <span className={cx("inline-block size-2 rounded-full", map[p])} />;
 }
 
@@ -298,6 +307,14 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
         </button>
 
         <button
+          onClick={(e) => { e.stopPropagation(); onEdit(task); }}
+          title="Edit task"
+          className="inline-flex items-center justify-center rounded-lg border border-platinum bg-white p-1.5 text-oxford-blue hover:bg-platinum/50"
+        >
+          <Pencil size={16} />
+        </button>
+
+        <button
           onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
           title="Delete task"
           aria-label={`Delete ${task.title}`}
@@ -310,7 +327,6 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
   );
 }
 
-
 // ------- Main View -------
 export default function TodoView({ onPickTask }) {
   const [tasks, setTasks] = useState([]);
@@ -322,6 +338,8 @@ export default function TodoView({ onPickTask }) {
   const [sort, setSort] = useState("priority-desc");
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
+  const {add: toast} = useToast();
+  const [editing, setEditing] = useState(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -341,6 +359,17 @@ export default function TodoView({ onPickTask }) {
     refresh();
   }, [refresh]);
 
+  // Listen for creations from the modal and update optimistically
+  useEffect(() => {
+    function onCreated(e) {
+      const row = e?.detail;
+      if (!row) return;
+      setTasks(prev => [hydrateTask(row), ...prev]);
+    }
+    window.addEventListener("tm:task-created", onCreated);
+    return () => window.removeEventListener("tm:task-created", onCreated);
+  }, []);
+
   async function handleAdd(text) {
     const created = await tasksAPI.create({ title: text, description: "", due_at: null, tags: [] });
 
@@ -354,10 +383,12 @@ export default function TodoView({ onPickTask }) {
       } else {
         // as a last resort, refresh
         await refresh();
+        toast("Task created successfully!", "success");
       }
     } catch(error) {
       console.err(error);
-      setErr(e?.message || "Failed to add a new task");
+      setErr(error?.message || "Failed to add a new task");
+      toast("Failed to create new task", "error");
     }
   }
 
@@ -382,9 +413,11 @@ export default function TodoView({ onPickTask }) {
       setTasks((prev) =>
         prev.map((x) => (x.id === id ? hydrateTask(updated) : x))
       );
+      toast("Successfully marked task as done!", "sucess");
     } catch (e) {
       console.error(e);
       setErr(e?.message || "Failed to update task");
+      toast("Failed to mark task as done", "error");
     }
   }
 
@@ -401,9 +434,11 @@ export default function TodoView({ onPickTask }) {
       );
       await refresh();
       clearSelection();
+      toast("Successfully marked tasks as done!", "sucess");
     } catch (e) {
       console.error(e);
       setErr(e?.message || "Failed to bulk update");
+      toast("Failed to mark tasks as done", "error");
     }
   }
 
@@ -416,9 +451,11 @@ export default function TodoView({ onPickTask }) {
       next.delete(id);
       return next;
     });
+    toast("Task deleted successfully!", "success");
   } catch (e) {
     console.error("Delete failed:", e);
     setErr(e?.message || "Failed to delete task");
+    toast("Failed to delete task", "error");
   }
   }
 
@@ -428,9 +465,11 @@ export default function TodoView({ onPickTask }) {
       await Promise.all(ids.map((id) => tasksAPI.delete(id)));
       setTasks((prev) => prev.filter((t) => !selected.has(t.id)));
       clearSelection();
+      toast("Selected tasks deleted successfully", "success");
     } catch (e) {
       console.error(e);
       setErr(e?.message || "Failed to delete all slected tasks");
+      toast("Failed to delete all slected tasks", "error");
     }
   }
 
@@ -579,6 +618,7 @@ export default function TodoView({ onPickTask }) {
               onToggleDone={() => toggleDone(t.id)}
               onDelete={handleDelete}
               onPick={onPickTask}
+              onEdit={(task) => setEditing(task)}
             />
           ))
         )}
