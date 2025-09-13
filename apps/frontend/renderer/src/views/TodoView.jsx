@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { tasksAPI } from "../lib/taskAPI";
 import { useToast } from "../ui/ToastProvider";
+import { Modal } from "../components/Modal";
 
 // ------- Mock projects (UI only) -------
 const projects = [
@@ -224,7 +225,7 @@ function Toolbar({
   );
 }
 
-function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onPick }) {
+function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onPick, onEdit }) {
   const proj = getProject(task.projectId);
   const done = task.status === "done";
 
@@ -388,7 +389,7 @@ export default function TodoView({ onPickTask }) {
     } catch(error) {
       console.err(error);
       setErr(error?.message || "Failed to add a new task");
-      toast("Failed to create new task", "error");
+      toast("Failed to create new task!", "error");
     }
   }
 
@@ -413,7 +414,7 @@ export default function TodoView({ onPickTask }) {
       setTasks((prev) =>
         prev.map((x) => (x.id === id ? hydrateTask(updated) : x))
       );
-      toast("Successfully marked task as done!", "sucess");
+      toast("Successfully marked task as done!", "success");
     } catch (e) {
       console.error(e);
       setErr(e?.message || "Failed to update task");
@@ -434,7 +435,7 @@ export default function TodoView({ onPickTask }) {
       );
       await refresh();
       clearSelection();
-      toast("Successfully marked tasks as done!", "sucess");
+      toast("Successfully marked tasks as done!", "success");
     } catch (e) {
       console.error(e);
       setErr(e?.message || "Failed to bulk update");
@@ -623,6 +624,48 @@ export default function TodoView({ onPickTask }) {
           ))
         )}
       </div>
+      <Modal
+        open={!!editing}
+        mode="edit"
+        initial={
+          editing ? {
+            id: editing.id,
+            title: editing.title,
+            description: editing.description,
+            project: editing.projectIdName || "", // if you have names later
+            priority: ["low","medium","high","urgent"][editing.priority] || "low",
+            tags: editing.tags || [],
+            dueDate: editing.due_at || null,
+            status: editing.status || "todo",
+          } : {}
+        }
+        onClose={() => setEditing(null)}
+        onSubmit={async (p) => {
+          try {
+            // Map priority string to your seeded IDs (1..4) if you store by ID
+            const PRIORITY_ID_BY_LABEL = { low: 1, medium: 2, high: 3, urgent: 4 };
+            const priority_id = PRIORITY_ID_BY_LABEL[(p.priority || "").toLowerCase()] ?? null;
+
+            const updated = await tasksAPI.update({
+              id: p.id,
+              title: p.title,
+              description: p.description,
+              status: p.status,
+              due_at: p.dueDate,
+              // project_id: … (hook up later when project API exists)
+              priority_id,
+              tags: p.tags || [],
+            });
+
+            setTasks((prev) => prev.map((t) => (t.id === updated.id ? hydrateTask(updated) : t)));
+            setEditing(null);
+            toast("Task updated", "success");
+          } catch (e) {
+            console.error(e);
+            toast(e?.message || "Failed to update task", "error");
+          }
+        }}
+      />
     </div>
   );
 }

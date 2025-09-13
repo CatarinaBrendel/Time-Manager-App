@@ -54,26 +54,28 @@ function ChipInput({ label, placeholder, mode = "multi", value, onChange }) {
   );
 }
 
-export default function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }) {
+export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }) {
+  const safeInitial = initial ?? {};
   const today = new Date().toISOString().split("T")[0];
-  const [title, setTitle] = useState(initial.title ?? "");
-  const [description, setDescription] = useState(initial.description || "");
-  const [project, setProject] = useState(initial.project || "");
-  const [priority, setPriority] = useState((initial.priority || "low").toLowerCase());
-  const [tags, setTags] = useState(Array.isArray(initial.tags) ? initial.tags : []);
-  const [due, setDue] = useState(initial.dueDate || initial.due_at || today);
-  const [status, setStatus] = useState((initial.status || "todo").toLowerCase());
+  const [title, setTitle] = useState(safeInitial.title ?? "");
+  const [description, setDescription] = useState(safeInitial.description ?? "");
+  const [project, setProject] = useState(safeInitial.project ?? "");
+  const [priority, setPriority] = useState((safeInitial.priority ?? "low").toLowerCase());
+  const [tags, setTags] = useState(Array.isArray(safeInitial.tags) ? safeInitial.tags : []);
+  const [due, setDue] = useState(safeInitial.dueDate ?? safeInitial.due_at ?? today);
+  const [status, setStatus] = useState((safeInitial.status ?? "todo").toLowerCase());
 
   // reseed fields each time we open with new initial data
   useEffect(() => {
     if (!open) return;
-    setTitle(initial?.title ?? "");
-    setDescription(initial.description || "");
-    setProject(initial.project || "");
-    setPriority((initial.priority || "low").toLowerCase());
-    setTags(Array.isArray(initial.tags) ? initial.tags : []);
-    setDue(initial.dueDate || initial.due_at || today);
-    setStatus((initial.status || "todo").toLowerCase());
+    const si = initial ?? {};
+    setTitle(si.title ?? "");
+    setDescription(si.description ?? "");
+    setProject(si.project ?? "");
+    setPriority((si.priority ?? "low").toLowerCase());
+    setTags(Array.isArray(si.tags) ? si.tags : []);
+    setDue(si.dueDate ?? si.due_at ?? today);
+    setStatus((si.status ?? "todo").toLowerCase());
   }, [open, initial, today]);
 
   // lock background scroll
@@ -88,7 +90,7 @@ export default function Modal({ open, mode = "create", initial = {}, onClose, on
 
   const valid = title.trim().length > 0;
   const payload = {
-    ...(initial?.id ? { id: initial.id } : {}),
+    ...(safeInitial.id ? { id: safeInitial.id } : {}),
     title: title.trim(),
     description: description.trim() || "",
     project: project || null,       // string; your repo can resolve later

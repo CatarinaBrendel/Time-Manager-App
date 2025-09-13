@@ -7,7 +7,8 @@ import TimeManagerDashboard from "./TimeManagerDashboard";
 import { tasksAPI } from "./lib/taskAPI";
 import {toRepoCreatePayload} from "./lib/taskCreateAdapter";
 import { useToast } from "./ui/ToastProvider";
-import  Modal from "./components/Modal";
+import { Modal } from "./components/Modal";
+import {Plus} from "lucide-react";
 
 // Small hook to keep "today" fresh (updates at next midnight)
 function useWeekday() {
@@ -38,11 +39,43 @@ function useWeekday() {
   return { weekdayShort, weekdayLong };
 }
 
+function HeaderAction() {
+  const [open, setOpen] = useState(false);
+  const { add: toast } = useToast();
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="h-9 rounded-xl border border-black/10 bg-white/80 px-3 text-sm hover:bg-white"
+      >
+        <span className="inline-flex items-center gap-2"><Plus className="size-4" /> New Task</span>
+      </button>
+      <Modal
+        open={open}
+        mode="create"
+        initial={{}}
+        onClose={() => setOpen(false)}
+        onSubmit={async (form) => {
+          try {
+            const payload = toRepoCreatePayload(form); // maps priority -> id
+            const created = await tasksAPI.create(payload);
+            window.dispatchEvent(new CustomEvent("tm:task-created", { detail: created }));
+            toast("Task created successfully!", "success");
+            setOpen(false);
+          } catch (e) {
+            console.error(e);
+            toast(e?.message || "Failed to create task!", "error");
+          }
+        }}
+      />
+    </>
+  )
+}
+
 export default function App() {
   const [active, setActive] = useState("dashboard");
   const { weekdayLong } = useWeekday();
-  const {add: toast} = useToast();
-  const [openNew, setOpenNew] = useState(false);
 
   useEffect(() => {
     const sync = () => {
@@ -113,6 +146,7 @@ export default function App() {
             right={
               <>
                 <HeaderSearch />
+                <HeaderAction />
               </>
             }
           />
