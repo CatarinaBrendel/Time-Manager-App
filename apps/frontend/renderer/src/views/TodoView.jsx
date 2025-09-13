@@ -636,7 +636,6 @@ export default function TodoView({ onPickTask }) {
             priority: ["low","medium","high","urgent"][editing.priority] || "low",
             tags: editing.tags || [],
             dueDate: editing.due_at || null,
-            status: editing.status || "todo",
           } : {}
         }
         onClose={() => setEditing(null)}
@@ -650,7 +649,6 @@ export default function TodoView({ onPickTask }) {
               id: p.id,
               title: p.title,
               description: p.description,
-              status: p.status,
               due_at: p.dueDate,
               // project_id: … (hook up later when project API exists)
               priority_id,

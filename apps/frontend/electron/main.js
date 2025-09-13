@@ -10,6 +10,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: path.join(__dirname, "../build/icon.png"),
     title: "Time Manager Dashboard",
     webPreferences: {
       preload: require('node:path').join(__dirname, 'preload.js'),

@@ -18,9 +18,10 @@
     "fetch:electron": "node ./scripts/fetch-electron.mjs",
 
     "build:renderer": "vite build --config renderer/vite.config.js",
-    "build:app": "pnpm dlx electron-builder -c electron-builder.yml",
-    "build:mac": "pnpm dlx electron-builder -m -c electron-builder.yml",
-    "build:win": "pnpm dlx electron-builder -w -c electron-builder.yml",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "build:app": "pnpm run build:renderer && pnpm run rebuild:native && pnpm dlx electron-builder -c electron-builder.yml",
+    "build:mac": "pnpm run build:renderer && pnpm dlx electron-builder -m -c electron-builder.yml",
+    "build:win": "pnpm run build:renderer && pnpm run rebuild:native && pnpm dlx electron-builder -w -c electron-builder.yml",
 
     "lint": "eslint \"renderer/src/**/*.{js,jsx,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"electron/**/*.{js,mjs}\" --no-error-on-unmatched-pattern",
     "format": "prettier -w .",

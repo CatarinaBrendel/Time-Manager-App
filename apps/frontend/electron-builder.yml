@@ -1,43 +1,57 @@
 appId: com.yourorg.time-manager
 productName: Time Manager
+
 directories:
-  app: .                # root of your Electron app
-  output: dist/release              # where installers land
+  app: .                 # root containing this package.json and your electron code
+  output: dist/release
+  buildResources: build  # where icon.png and optional DMG background live
+
 files:
-  - electron/**                     # main & preload code
-  - renderer/dist/**                # built UI
-  - electron/backend/**             # your backend code (db, etc)
-  - "!renderer/src/**"              # exclude sources
+  - electron/**          # main & preload code
+  - renderer/dist/**     # built UI from Vite
+  - "!renderer/src/**"   # exclude sources
   - "!renderer/vite.config.js"
   - "!**/*.map"
+
 extraResources:
   - from: electron/backend/db/migrations
-    to: resources/migrations        # pack migrations alongside app
+    to: resources/migrations
     filter:
       - "**/*"
-mac:
-  target:
-    - dmg
-  category: public.app-category.productivity
-  # Build unsigned for local testing (avoid code-sign prompts)
-  identity: null
-  hardenedRuntime: false
-dmg:
-  sign: false                       # skip DMG signing locally
+
 asar: true
-npmRebuild: false
+asarUnpack:
+  - "**/*.node"                    # unpack native modules
+  - "node_modules/better-sqlite3/**"  # belt-and-suspenders for better-sqlite3
+
+npmRebuild: true                  # we rebuild manually before packaging
+
+mac:
+  target: [dmg]
+  category: public.app-category.productivity
+  icon: electron/build/icon.png
+  identity: null                   # unsigned for local testing
+  hardenedRuntime: false
+
+dmg:
+  sign: false
+  # Optional customizations:
+  # background: build/dmg-background.png
+  iconSize: 128
+  contents:
+  - { x: 130, y: 220, type: file }
+  - { x: 410, y: 220, type: link, path: "/Applications" }
 
 win:
-  target:
-    - nsis           # produces a .exe installer
+  target: [nsis]
+  icon: electron/build/icon.png
   artifactName: "${productName}-${version}-win-${arch}.${ext}"
+
 nsis:
   oneClick: true
   perMachine: false
   allowToChangeInstallationDirectory: false
 
-
-# Optional: Linux
 # linux:
 #   target: AppImage
 #   category: Utility

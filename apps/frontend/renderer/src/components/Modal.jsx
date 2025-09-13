@@ -63,7 +63,6 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
   const [priority, setPriority] = useState((safeInitial.priority ?? "low").toLowerCase());
   const [tags, setTags] = useState(Array.isArray(safeInitial.tags) ? safeInitial.tags : []);
   const [due, setDue] = useState(safeInitial.dueDate ?? safeInitial.due_at ?? today);
-  const [status, setStatus] = useState((safeInitial.status ?? "todo").toLowerCase());
 
   // reseed fields each time we open with new initial data
   useEffect(() => {
@@ -75,7 +74,6 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
     setPriority((si.priority ?? "low").toLowerCase());
     setTags(Array.isArray(si.tags) ? si.tags : []);
     setDue(si.dueDate ?? si.due_at ?? today);
-    setStatus((si.status ?? "todo").toLowerCase());
   }, [open, initial, today]);
 
   // lock background scroll
@@ -97,7 +95,6 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
     priority,                       // 'low'|'medium'|'high'|'urgent'
     tags,
     dueDate: due || null,           // yyyy-mm-dd
-    status,                         // 'todo'|'in progress'|'done'
   };
 
   const ui = (
@@ -145,16 +142,25 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
               <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
           </div>
-
           {/* Status */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-              <option value="todo">To-Do</option>
-              <option value="in progress">In Progress</option>
-              <option value="done">Done</option>
-            </select>
-          </div>
+            <p 
+              className={`rounded-xl border px-3 py-2 text-sm font-medium
+                ${
+                  safeInitial.status === "in progress"
+                    ? "border-blue-200 bg-blue-50 text-blue-700"
+                    : safeInitial.status === "done"
+                    ? "border-green-200 bg-green-50 text-green-700"
+                    : "border-gray-200 bg-gray-50 text-gray-700"
+                }`}
+                >
+              {safeInitial.status
+                ? safeInitial.status.charAt(0).toUpperCase() + safeInitial.status.slice(1)
+                : "To-Do"}
+                
+            </p>
+         </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
