@@ -21,13 +21,19 @@ export function toRepoCreatePayload(modal) {
   const key = (modal.priority || "").toString().toLowerCase();
   const priority_id = PRIORITY_ID_BY_LABEL[key] ?? null;
 
+  // minutes (UI) -> seconds (DB)
+  const etaSec =
+    modal?.etaMin === "" || modal?.etaMin == null
+      ? null
+      : Math.max(0, parseInt(modal.etaMin, 10) || 0) * 60;
+
   return {
     title: modal.title,
     description: modal.description ?? "",
     due_at: modal.dueDate ?? null,
     project_id: null, // TODO: resolve/create project by name when project API is ready
     priority_id,
-    eta_sec: null,
+    eta_sec: etaSec,
     started_at: null,
     ended_at: null,
     tags: Array.isArray(modal.tags) ? modal.tags : [],

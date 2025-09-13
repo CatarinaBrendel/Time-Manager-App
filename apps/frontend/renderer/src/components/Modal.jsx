@@ -171,6 +171,9 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
   const [tags, setTags] = useState(Array.isArray(safeInitial.tags) ? safeInitial.tags : []);
   const [due, setDue] = useState(safeInitial.dueDate ?? safeInitial.due_at ?? today);
   const [allTags, setAllTags] = useState([]);      // [{id,name}]
+  const [etaMin, setEtaMin] = useState(
+    Number.isFinite(safeInitial.eta_sec) ? Math.round(safeInitial.eta_sec / 60) : ""
+  );
 
   // reseed fields each time we open with new initial data
   useEffect(() => {
@@ -182,6 +185,13 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
     setPriority((si.priority ?? "low").toLowerCase());
     setTags(Array.isArray(si.tags) ? si.tags : []);
     setDue(si.dueDate ?? si.due_at ?? today);
+    setEtaMin(
+      Number.isFinite(si.eta_sec)
+        ? Math.round(Number(si.eta_sec) / 60)
+        : Number.isFinite(si.etaMin)
+          ? Math.round(Number(si.etaMin))
+          : ""
+    );
   }, [open, initial, today]);
 
   // lock background scroll
@@ -213,12 +223,13 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
     priority,                       // 'low'|'medium'|'high'|'urgent'
     tags,
     dueDate: due || null,           // yyyy-mm-dd
+    eta_sec: (etaMin === "" || etaMin == null ? null : Math.max(0, parseInt(etaMin, 10)) * 60),
   };
 
   const ui = (
     <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/40">
-      <div className="w-full max-w-2xl max-h-[min(90vh,48rem)] overflow-auto rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+      <div className="w-full max-w-2xl max-h-[min(100vh-1.5rem)] overflow-auto rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-2">
           <h2 className="text-lg font-semibold">{mode === "edit" ? "Edit Task" : "Add New Task"}</h2>
           <button onClick={onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" aria-label="Close">
             <X className="h-5 w-5" />
@@ -235,7 +246,13 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
           {/* Description */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Description <span className="text-gray-400">(optional)</span></label>
-            <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <textarea 
+              rows={2} 
+              value={description} 
+              onChange={(e) => setDescription(e.target.value)} 
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm
+                  leading-5 resize-y overflow-y-auto max-h-28 min-h-[3.25rem] focus:outline-none focus:ring-2 focus:ring-indigo-500
+                  whitespace-pre-wrap break-words" />
           </div>
 
           {/* Project + Priority */}
@@ -270,6 +287,44 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
                 onChange={(e) => setDue(e.target.value)}
                 className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
+            </div>
+
+            {/* ETA (minutes) */}
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-gray-700">ETA (minutes)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  step={5}
+                  inputMode="numeric"
+                  placeholder="e.g. 25"
+                  value={etaMin}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    // allow blank, otherwise keep 0+ integers
+                    if (v === "") return setEtaMin("");
+                    const n = Math.max(0, Math.floor(Number(v) || 0));
+                    setEtaMin(n);
+                  }}
+                  className="w-32 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <div className="flex gap-1">
+                  {[5, 15, 25, 60].map(n => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setEtaMin(n)}
+                      className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
+                    >
+                      {n}m
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-gray-400">
+                Used for planning; the actual total comes from tracked work time (excludes pauses).
+              </p>
             </div>
           </div>
 

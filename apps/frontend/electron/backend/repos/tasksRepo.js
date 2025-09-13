@@ -215,7 +215,6 @@ function TasksRepo(db) {
     setStatus.run({ task_id, status: 'in progress', now });
   });
 
-
   const txPause = db.transaction(({ task_id, now }) => {
     // Only act if a focus session is open
     const open = getOpenFocus.get({ task_id });
@@ -285,7 +284,22 @@ function TasksRepo(db) {
 
   const txUpdate = db.transaction((payload) => {
     const now = nowIso();
-    updateTask.run({ ...payload, now });
+    // supply ALL named params your UPDATE references
+    const defaults = {
+      id: null,
+      project_id: null,
+      title: null,
+      description: null,
+      status: null,        // << important: present, but null
+      priority_id: null,
+      eta_sec: null,
+      due_at: null,
+      started_at: null,
+      ended_at: null,
+      now,
+    };
+
+    updateTask.run({ ...defaults, ...payload, now });
     if (payload.tags) {
       unlinkAllTags.run(payload.id);
       const names = Array.from(new Set(payload.tags)).filter(Boolean);

@@ -18,6 +18,8 @@ import {
 import { tasksAPI } from "../lib/taskAPI";
 import { useToast } from "../ui/ToastProvider";
 import { Modal } from "../components/Modal";
+import { formatDuration } from "../helpers/helpersFunctions";
+import { PriorityDot } from "../ui/PriorityDot";
 
 // ------- Mock projects (UI only) -------
 const projects = [
@@ -64,6 +66,11 @@ function hydrateTask(dbTask = {}) {
     tags = [];
   }
 
+  const etaSecRaw = Number(dbTask.eta_sec);
+  const etaMin =
+    Number.isFinite(etaSecRaw) ? Math.round(etaSecRaw / 60) : undefined;
+
+
   return {
     id: dbTask.id,
     title: dbTask.title || "",
@@ -81,26 +88,12 @@ function hydrateTask(dbTask = {}) {
 
     // UI convenience
     priority: uiPriority,
-    etaMin: Number.isFinite(dbTask.eta_sec) ? Math.round(dbTask.eta_sec / 60) : undefined,
+    etaMin,
 
     total_sec:     Number(dbTask.total_sec ?? 0),
     paused_sec:    Number(dbTask.paused_sec ?? 0),
     effective_sec: Number(dbTask.effective_sec ?? 0),
   };
-}
-
-function formatDuration(seconds = 0) {
-  const s = Math.max(0, Math.floor(seconds));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = s % 60;
-  const pad = (n) => String(n).padStart(2, "0");
-  return h > 0 ? `${h}h:${pad(m)}min:${pad(ss)}s` : `${m}min:${pad(ss)}s`;
-}
-
-function PriorityDot({ p }) {
-  const map = { 0: "bg-gray-300", 1: "bg-accent", 2: "bg-red-500", 3:"bg-black" };
-  return <span className={cx("inline-block size-2 rounded-full", map[p])} />;
 }
 
 // ------- Subcomponents -------
@@ -263,6 +256,8 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
         "group grid items-center gap-3 rounded-xl border px-3 py-2 shadow-sm grid-cols-[auto_1fr_auto]",
         inProgress
           ? "border-amber-300 bg-amber-50"
+          : done
+          ? "border-gray-300 bg-gray-100"
           : "border-platinum bg-white"
       )}
       onClick={(e) => {
@@ -304,23 +299,35 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
             </span>
           )}
 
-          {task.tags?.length > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <TagIcon size={14} />
+          {/* Tags */}
+          <span className="inline-flex items-center gap-1">
+            <TagIcon
+              size={14}
+              className={task.tags?.length ? "text-oxford-blue" : "text-gray-400"}
+              aria-hidden="true"
+            />
+            {task.tags?.length ? (
               <span className="flex flex-wrap gap-1">
                 {task.tags.map((t) => (
-                  <span key={t} className="rounded-full bg-platinum px-2 py-0.5 text-[10px]">#{t}</span>
+                  <span
+                    key={t}
+                    className="rounded-full bg-platinum px-2 py-0.5 text-[10px]"
+                  >
+                    #{t}
+                  </span>
                 ))}
               </span>
-            </span>
-          )}
+            ) : (
+              <span className="text-gray-400">-</span>
+            )}
+          </span>
           
           {/* Time */}
           <span className="inline-flex items-center gap-1">
             <Clock3 size={14} />
             {task.status === "done"
               ? formatDuration(task.effective_sec ?? 0)
-              : `${task.etaMin ?? "—"}m`}                 
+              : `ETA: ${task.etaMin ?? "—"}min`}                 
           </span>
 
           {/* priority */}
@@ -792,6 +799,7 @@ export default function TodoView({ onPickTask }) {
             priority: ["low","medium","high","urgent"][editing.priority] || "low",
             tags: editing.tags || [],
             dueDate: editing.due_at || null,
+            etaMin: editing.etaMin ?? null,
           } : {}
         }
         onClose={() => setEditing(null)}
@@ -806,9 +814,10 @@ export default function TodoView({ onPickTask }) {
               title: p.title,
               description: p.description,
               due_at: p.dueDate,
-              // project_id: … (hook up later when project API exists)
+              project_id: p.project_id ?? null,
               priority_id,
               tags: p.tags || [],
+              eta_sec: p.eta_sec,
             });
 
             setTasks((prev) => prev.map((t) => (t.id === updated.id ? hydrateTask(updated) : t)));

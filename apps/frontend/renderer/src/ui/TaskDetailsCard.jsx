@@ -1,4 +1,5 @@
 import { Clock3, Flag, Tag as TagIcon } from "lucide-react";
+import { formatDuration } from "../helpers/helpersFunctions";
 
 function Field({label, children}){
   return (
@@ -27,7 +28,9 @@ export default function TaskDetailsCard({ task }) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="ETA">
           <span className="inline-flex items-center gap-1 text-gray-700">
-            <Clock3 size={16}/> {task.etaMin ?? "—"} min
+            <Clock3 size={16}/> {task.status === "done"
+                          ? formatDuration(task.effective_sec ?? 0)
+                          : `ETA: ${task.etaMin ?? "—"}min`}  
           </span>
         </Field>
 
