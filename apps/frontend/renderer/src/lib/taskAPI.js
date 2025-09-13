@@ -10,3 +10,7 @@ export const tasksAPI = {
   stop:  (id)   => window.tm.tasks.stop(id),
 };
 
+export const tagsAPI = {
+  list: () => window.tm.tags.list(),
+};
+

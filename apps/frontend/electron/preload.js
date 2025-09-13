@@ -23,6 +23,9 @@ try {
       current: () => ipcRenderer.invoke('tm.sessions.current'),
       summary: (days) => ipcRenderer.invoke('tm.sessions.summary', days),
     },
+    tags: {
+      list: () => ipcRenderer.invoke('tm.tags.list'),
+    },
     _debug: () => 'preload-ok'
   });
   console.log('[preload] exposed window.tm');

@@ -2,57 +2,164 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { tagsAPI } from "../lib/taskAPI";
 
 // ---- ChipInput stays the same as in your current modal ----
-function ChipInput({ label, placeholder, mode = "multi", value, onChange }) {
+function ChipInput({ label, placeholder, mode = "multi", value, onChange, suggestions = [] }) {
   const [input, setInput] = useState("");
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const [popIndex, setPopIndex] = useState(-1);
   const inputRef = useRef(null);
+
   const chips = useMemo(
     () => (mode === "single" ? (value ? [value] : []) : Array.isArray(value) ? value : []),
     [mode, value]
   );
+
+  const selectedLower = useMemo(
+    () => new Set(chips.map((c) => c.toLowerCase())),
+    [chips]
+  );
+
+  const filtered = useMemo(() => {
+    const q = input.trim().toLowerCase();
+    let pool = (suggestions || [])
+      .map(String)
+      .filter((name) => !selectedLower.has(name.toLowerCase()));
+    if (q) pool = pool.filter((name) => name.toLowerCase().includes(q));
+    return pool.slice(0, 8);
+  }, [suggestions, selectedLower, input]);
+
   const commit = (t) => {
-    const s = t.trim(); if (!s) return;
-    if (mode === "single") onChange(s);
-    else if (!chips.includes(s)) onChange([...chips, s]);
+    const s = String(t || "").trim();
+    if (!s) return;
+    if (mode === "single") {
+      if (!chips.includes(s)) onChange(s);
+    } else {
+      if (!chips.some((c) => c.toLowerCase() === s.toLowerCase())) {
+        onChange([...chips, s]);
+        // pop effect on the newly added chip
+        setPopIndex(chips.length);
+        setTimeout(() => setPopIndex(-1), 250);
+      }
+    }
     setInput("");
+    setActiveIndex(-1);
+    setOpen(false);
   };
+
+  const removeAt = (i) => {
+    if (mode === "single") onChange("");
+    else onChange(chips.filter((_, j) => j !== i));
+  };
+
   const onKeyDown = (e) => {
-    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commit(input); }
-    else if (e.key === "Backspace" && !input && chips.length) onChange(mode === "single" ? "" : chips.slice(0, -1));
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      if (activeIndex >= 0 && activeIndex < filtered.length) commit(filtered[activeIndex]);
+      else commit(input); // create new tag
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setOpen(true);
+      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Escape") {
+      setOpen(false);
+      setActiveIndex(-1);
+    } else if (e.key === "Backspace" && !input && chips.length) {
+      removeAt(chips.length - 1);
+    }
   };
+
   return (
     <div className="w-full">
       {label && <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>}
+
       <div
-        className="flex min-h-[42px] w-full flex-wrap gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-500"
-        onClick={() => inputRef.current?.focus()}
+        className="relative"
+        onMouseDown={() => inputRef.current?.focus()}
       >
-        {chips.map((c, i) => (
-          <span key={`${c}-${i}`} className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-sm text-indigo-700">
-            {c}
-            <button type="button" onClick={() => (mode === "single" ? onChange("") : onChange(chips.filter((_, j) => j !== i)))} className="rounded-full p-0.5 text-indigo-500 hover:bg-indigo-100">
-              <X className="h-4 w-4" />
-            </button>
-          </span>
-        ))}
-        {!(mode === "single" && chips.length === 1) && (
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={placeholder}
-            className="min-w-[120px] flex-1 border-0 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none"
-          />
+        <div className="flex min-h-[42px] w-full flex-wrap gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-500">
+          {chips.map((c, i) => (
+            <span
+              key={`${c}-${i}`}
+              className={`inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-sm text-indigo-700 transition-transform ${
+                popIndex === i ? "scale-105 ring-2 ring-indigo-200" : ""
+              }`}
+            >
+              {c}
+              <button
+                type="button"
+                onClick={() => removeAt(i)}
+                className="rounded-full p-0.5 text-indigo-500 hover:bg-indigo-100"
+                aria-label={`Remove ${c}`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </span>
+          ))}
+
+          {!(mode === "single" && chips.length === 1) && (
+            <input
+              ref={inputRef}
+              value={input}
+              onFocus={() => setOpen(true)}
+              onChange={(e) => { setInput(e.target.value); setOpen(true); setActiveIndex(-1); }}
+              onKeyDown={onKeyDown}
+              placeholder={placeholder}
+              className="min-w-[120px] flex-1 border-0 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none"
+            />
+          )}
+        </div>
+
+        {/* Dropdown */}
+        {open && (filtered.length > 0 || input.trim()) && (
+          <div className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+            {filtered.map((name, idx) => (
+              <button
+                key={name}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => commit(name)}
+                onMouseEnter={() => setActiveIndex(idx)}
+                className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-indigo-50 ${
+                  idx === activeIndex ? "bg-indigo-50" : ""
+                }`}
+              >
+                <span>{name}</span>
+                <span className="text-xs text-gray-400">press ⏎</span>
+              </button>
+            ))}
+
+            {/* Create new */}
+            {input.trim() &&
+              !filtered.some((s) => s.toLowerCase() === input.trim().toLowerCase()) && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => commit(input)}
+                  className="flex w-full items-center justify-between border-t border-gray-100 px-3 py-2 text-left text-sm hover:bg-green-50"
+                >
+                  <span>Create “{input.trim()}”</span>
+                  <span className="text-xs text-gray-400">press ⏎</span>
+                </button>
+              )}
+          </div>
         )}
       </div>
+
       <p className="mt-1 text-xs text-gray-400">
-        {mode === "single" ? "Type a project and press Enter." : "Type a tag and press Enter or comma."}
+        {mode === "single"
+          ? "Type a project and press Enter."
+          : "Type to search or create. Enter to add. ↑/↓ to navigate."}
       </p>
     </div>
   );
 }
+
 
 export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }) {
   const safeInitial = initial ?? {};
@@ -63,6 +170,7 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
   const [priority, setPriority] = useState((safeInitial.priority ?? "low").toLowerCase());
   const [tags, setTags] = useState(Array.isArray(safeInitial.tags) ? safeInitial.tags : []);
   const [due, setDue] = useState(safeInitial.dueDate ?? safeInitial.due_at ?? today);
+  const [allTags, setAllTags] = useState([]);      // [{id,name}]
 
   // reseed fields each time we open with new initial data
   useEffect(() => {
@@ -83,6 +191,16 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, [open]);
+
+  // tags
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await tagsAPI.list();
+        setAllTags(rows || []);
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   if (!open) return null;
 
@@ -136,12 +254,25 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
 
           {/* Tags + Due Date */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ChipInput label="Tags" placeholder="Type tag and Enter" mode="multi" value={tags} onChange={setTags} />
+            <ChipInput
+              label="Tags"
+              placeholder="Type to search or create…"
+              mode="multi"
+              value={tags}
+              onChange={setTags}
+              suggestions={(allTags || []).map((t) => t.name)}
+            />
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Due date</label>
-              <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              <input
+                type="date"
+                value={due}
+                onChange={(e) => setDue(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
             </div>
           </div>
+
           {/* Status */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>

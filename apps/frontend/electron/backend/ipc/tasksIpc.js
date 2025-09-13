@@ -31,5 +31,7 @@ function registerTasksIpc(ipcMain, repos) {
   ipcMain.handle('tm.tasks.start', (_e, id) => repos.tasks.start(Number(id)));
   ipcMain.handle('tm.tasks.pause', (_e, id) => repos.tasks.pause(Number(id)));
   ipcMain.handle('tm.tasks.stop',  (_e, id) => repos.tasks.stop (Number(id)));
+
+  ipcMain.handle('tm.tags.list', async () => repos.tags.list());
 }
 module.exports = { registerTasksIpc };

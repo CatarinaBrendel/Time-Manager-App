@@ -5,6 +5,7 @@ const Database = require('better-sqlite3');
 const { openDatabase } = require('./db/database');
 const { ensureMigrations } = require('./db/migrate');
 const { TasksRepo } = require('./repos/tasksRepo');
+const { TagsRepo } = require('./repos/tagsRepo');
 const { SessionsRepo } = require('./repos/sessionsRepo');
 const { registerTasksIpc } = require('./ipc/tasksIpc');
 const { registerSessionsIpc } = require('./ipc/sessionsIpc');
@@ -31,6 +32,7 @@ function initBackend(app, ipcMain) {
   const repos = {
     tasks: TasksRepo(db),
     sessions: SessionsRepo(db),
+    tags: TagsRepo(db),
   };
 
   // Avoid duplicates during hot reload
