@@ -6,11 +6,14 @@ try {
   contextBridge.exposeInMainWorld('tm', {
     ping: () => ipcRenderer.invoke('ping'),
     tasks: {
-    create: (payload) => ipcRenderer.invoke('tm.tasks.create', payload),
-    update: (payload) => ipcRenderer.invoke('tm.tasks.update', payload),
-    get: (id) => ipcRenderer.invoke('tm.tasks.get', id),
-    list: (opts) => ipcRenderer.invoke('tm.tasks.list', opts),
-    delete: (id) => ipcRenderer.invoke('tm.tasks.delete', id),
+      create: (payload) => ipcRenderer.invoke('tm.tasks.create', payload),
+      update: (payload) => ipcRenderer.invoke('tm.tasks.update', payload),
+      get: (id) => ipcRenderer.invoke('tm.tasks.get', id),
+      list: (opts) => ipcRenderer.invoke('tm.tasks.list', opts),
+      delete: (id) => ipcRenderer.invoke('tm.tasks.delete', id),
+      start:  (id)      => ipcRenderer.invoke('tm.tasks.start',  id),
+      pause:  (id)      => ipcRenderer.invoke('tm.tasks.pause',  id),
+      stop:   (id)      => ipcRenderer.invoke('tm.tasks.stop',   id),
     },
     sessions: {
       start:   (payload) => ipcRenderer.invoke('tm.sessions.start', payload),

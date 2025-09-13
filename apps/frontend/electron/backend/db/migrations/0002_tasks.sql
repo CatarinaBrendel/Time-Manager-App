@@ -14,16 +14,22 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
   archived_at   TEXT,                           -- null unless status=archived
+  -- Core status guard-rail
+  CHECK (status IN ('todo','in progress','done','archived')),
+  -- if done -> ended_at present; if not done -> ended_at null
+  CHECK ((status='done' AND ended_at IS NOT NULL) OR (status<>'done' AND ended_at IS NULL)),
+  -- if archived -> archived_at present; if not archived -> archived_at null
+  CHECK ((status='archived' AND archived_at IS NOT NULL) OR (status<>'archived' AND archived_at IS NULL)),
   FOREIGN KEY(project_id)  REFERENCES projects(id)   ON DELETE SET NULL,
   FOREIGN KEY(priority_id) REFERENCES priorities(id) ON DELETE SET NULL,
-  FOREIGN KEY(created_by)  REFERENCES users(id)      ON DELETE SET NULL,
-  CHECK (status IN ('todo','in progres','done','archived'))
+  FOREIGN KEY(created_by)  REFERENCES users(id)      ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_project   ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status    ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due       ON tasks(due_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_priority  ON tasks(priority_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status_due     ON tasks(status, due_at);
 
 -- Many-to-many: tasks <-> tags
 CREATE TABLE IF NOT EXISTS task_tags (
@@ -58,3 +64,21 @@ CREATE TABLE IF NOT EXISTS task_events (
   FOREIGN KEY(user_id) REFERENCES users(id)  ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id);
+
+-- Captures status and title changes
+CREATE TRIGGER IF NOT EXISTS trg_task_status_event
+AFTER UPDATE OF status ON tasks
+FOR EACH ROW WHEN NEW.status <> OLD.status
+BEGIN
+  INSERT INTO task_events(task_id, event_type, payload_json)
+  VALUES (NEW.id, 'status_changed', json_object('old', OLD.status, 'new', NEW.status));
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_task_title_event
+AFTER UPDATE OF title ON tasks
+FOR EACH ROW WHEN NEW.title <> OLD.title
+BEGIN
+  INSERT INTO task_events(task_id, event_type, payload_json)
+  VALUES (NEW.id, 'title_changed', json_object('old', OLD.title, 'new', NEW.title));
+END;
+

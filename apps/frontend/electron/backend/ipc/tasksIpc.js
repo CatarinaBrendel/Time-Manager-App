@@ -27,5 +27,9 @@ function registerTasksIpc(ipcMain, repos) {
     repos.tasks.list(limit, offset)
   );
   ipcMain.handle('tm.tasks.delete', (_e, id) => repos.tasks.delete(Number(id)));
+
+  ipcMain.handle('tm.tasks.start', (_e, id) => repos.tasks.start(Number(id)));
+  ipcMain.handle('tm.tasks.pause', (_e, id) => repos.tasks.pause(Number(id)));
+  ipcMain.handle('tm.tasks.stop',  (_e, id) => repos.tasks.stop (Number(id)));
 }
 module.exports = { registerTasksIpc };

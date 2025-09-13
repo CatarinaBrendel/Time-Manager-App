@@ -10,7 +10,10 @@ import {
   CheckCircle2,
   Circle,
   Trash2,
-  Pencil
+  Pencil,
+  Play,
+  Pause,
+  Square
 } from "lucide-react";
 import { tasksAPI } from "../lib/taskAPI";
 import { useToast } from "../ui/ToastProvider";
@@ -46,12 +49,17 @@ function hydrateTask(dbTask = {}) {
 
   
   // Accept tags from various shapes: array | stringified JSON | null/undefined
-  let raw = dbTask.tags ?? dbTask.tags_json ?? [];
+  let raw = dbTask.tags ?? dbTask.tags_json ?? dbTask.tags_csv ?? [];
   let tags;
   if (Array.isArray(raw)) {
     tags = raw;
   } else if (typeof raw === "string") {
-    try { tags = JSON.parse(raw); } catch { tags = []; }
+    try { 
+      tags = JSON.parse(raw); 
+      if(!Array.isArray(tags)) throw new Error();
+    } catch { 
+      tags = raw.split(",").map(s => s.trim()).filter(Boolean); 
+    }
   } else {
     tags = [];
   }
@@ -66,13 +74,29 @@ function hydrateTask(dbTask = {}) {
     created_at: dbTask.created_at || "",
     updated_at: dbTask.updated_at || "",
 
-    // UI-only placeholders (until schema supports them)
-    projectId: "",
+    // IDs from the view (so filters work)
+    projectId: dbTask.project_id ?? "",
+    priorityId: dbTask.priority_id ?? null,
+    companyId: dbTask.company_id ?? null,
+
+    // UI convenience
     priority: uiPriority,
-    etaMin: 15,
+    etaMin: Number.isFinite(dbTask.eta_sec) ? Math.round(dbTask.eta_sec / 60) : undefined,
+
+    total_sec:     Number(dbTask.total_sec ?? 0),
+    paused_sec:    Number(dbTask.paused_sec ?? 0),
+    effective_sec: Number(dbTask.effective_sec ?? 0),
   };
 }
 
+function formatDuration(seconds = 0) {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}h:${pad(m)}min:${pad(ss)}s` : `${m}min:${pad(ss)}s`;
+}
 
 function PriorityDot({ p }) {
   const map = { 0: "bg-gray-300", 1: "bg-accent", 2: "bg-red-500", 3:"bg-black" };
@@ -225,9 +249,10 @@ function Toolbar({
   );
 }
 
-function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onPick, onEdit }) {
+function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onPick, onEdit, onStart, onPause, onStop, paused}) {
   const proj = getProject(task.projectId);
   const done = task.status === "done";
+  const inProgress = task.status === "in progress";
 
   return (
     <motion.div
@@ -235,9 +260,10 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       className={cx(
-        "group grid items-center gap-3 rounded-xl border border-platinum bg-white px-3 py-2 shadow-sm",
-        // ⬇ 3 columns: checkbox | content | actions
-        "grid-cols-[auto_1fr_auto]"
+        "group grid items-center gap-3 rounded-xl border px-3 py-2 shadow-sm grid-cols-[auto_1fr_auto]",
+        inProgress
+          ? "border-amber-300 bg-amber-50"
+          : "border-platinum bg-white"
       )}
       onClick={(e) => {
         const tag = e.target.tagName.toLowerCase();
@@ -256,16 +282,25 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
 
       {/* Content: title + second line meta */}
       <div className="min-w-0">
-        <div className={cx("truncate font-medium text-oxford-blue", done && "line-through text-gray-400")}>
+        <div className={cx("truncate font-medium text-oxford-blue", done && "line-through text-gray-400 opacity-70 font-normal")}>
           {task.title}
+          {inProgress && paused && (
+            <span className="ml-2 rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+              Paused
+            </span>
+          )}
         </div>
-
         {/* second line: project/tag/time/priority */}
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
           {proj && (
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-full" style={{ background: proj.color }} />
               {proj.name}
+            </span>
+          )}
+          {!done && inProgress && task.effective_sec != null && (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5">
+              Worked: {formatDuration(task.effective_sec)}
             </span>
           )}
 
@@ -279,10 +314,13 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
               </span>
             </span>
           )}
-
-          {/* time */}
+          
+          {/* Time */}
           <span className="inline-flex items-center gap-1">
-            <Clock3 size={14} /> {task.etaMin ?? "—"}m
+            <Clock3 size={14} />
+            {task.status === "done"
+              ? formatDuration(task.effective_sec ?? 0)
+              : `${task.etaMin ?? "—"}m`}                 
           </span>
 
           {/* priority */}
@@ -293,10 +331,63 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
         </div>
       </div>
 
-      {/* Actions: Mark done + Trash */}
+      {/* Actions: Start/Pause/Stop + Mark done + Trash */}
       <div className="flex items-center gap-2">
+        {/* Start / Pause */}
+        {inProgress ? (
+          paused ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onStart(task); }}
+              className="inline-flex items-center gap-2 rounded-lg border border-platinum bg-white px-2 py-1 text-xs hover:bg-platinum/60"
+              title="Resume"
+            >
+              <Play size={16} /> Resume
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPause(task); }}
+              className="inline-flex items-center gap-2 rounded-lg border border-platinum bg-white px-2 py-1 text-xs hover:bg-platinum/60"
+              title="Pause"
+            >
+              <Pause size={16} /> Pause
+            </button>
+          )
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); !done && onStart(task); }}
+            disabled={done}
+            className={cx(
+              "inline-flex items-center gap-2 rounded-lg border px-2 py-1 text-xs",
+              done
+                ? "border-platinum bg-white text-gray-400"
+                : "border-platinum bg-white hover:bg-platinum/60"
+            )}
+            title={done ? "Already done" : "Start"}
+          >
+            <Play size={16} /> Start
+          </button>
+        )}
+
+        {/* Stop (enabled only while in progress) */}
+        {!done && (
+          <button
+            onClick={(e) => { e.stopPropagation(); inProgress && onStop(task); }}
+            disabled={!inProgress}
+            className={cx(
+              "inline-flex items-center gap-2 rounded-lg border px-2 py-1 text-xs",
+              inProgress
+                ? "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                : "border-platinum bg-white text-gray-400"
+            )}
+            title="Stop"
+          >
+            <Square size={16} /> Stop
+          </button>
+        )}
+
+        {/* Mark Done */}
         <button
-          onClick={(e) => { e.stopPropagation(); onToggleDone(); }}
+          onClick={(e) => { e.stopPropagation(); !inProgress && onToggleDone(task.id); }}
           className={cx(
             "inline-flex items-center gap-2 rounded-lg border px-2 py-1 text-xs",
             done
@@ -342,15 +433,76 @@ export default function TodoView({ onPickTask }) {
   const {add: toast} = useToast();
   const [editing, setEditing] = useState(null);
 
+ // Optional UI-only paused flag per task (no server write for pause)
+  const [pausedIds, setPausedIds] = useState(() => new Set());
+
+  async function refreshTask(id) {
+    try {
+      const latest = await tasksAPI.get(id);
+      setTasks(prev => prev.map(t => (t.id === id ? hydrateTask(latest) : t)));
+    } catch {
+      // fall back to full refresh if single get fails
+      refresh();
+    }
+  }
+
+  async function startTask(task) {
+    if (!task?.id) return;
+    try {
+      await tasksAPI.start(task.id);
+      await refreshTask(task.id);
+      // clear any local paused UI flag you may keep
+      setPausedIds(s => { const n = new Set(s); n.delete(task.id); return n; });
+      toast(`Started "${task.title}"`, "success");
+    } catch (e) {
+      console.error(e);
+      toast(e?.message || "Failed to start task", "error");
+    }
+  }
+
+  async function pauseTask(task) {
+    if (!task?.id) return;
+    try {
+      await tasksAPI.pause(task.id);
+      await refreshTask(task.id);
+      // local UI chip to show "Paused" (status remains in progress)
+      setPausedIds(s => { const n = new Set(s); 
+        n.has(task.id) ? n.delete(task.id) : n.add(task.id); 
+        return n; 
+      });
+      toast(`Paused "${task.title}"`, "info");
+    } catch (e) {
+      console.error(e);
+      toast(e?.message || "Failed to pause task", "error");
+    }
+  }
+
+  async function stopTask(task) {
+    if (!task?.id) return;
+    try {
+      await tasksAPI.stop(task.id);
+      await refreshTask(task.id);
+      setPausedIds(s => { const n = new Set(s); n.delete(task.id); return n; });
+      const justStopped = tasks.find(t => t.id === task.id); // may be stale; safe fallback
+      const total = formatDuration((justStopped?.effective_sec) ?? 0);
+      toast(`Stopped "${task.title}" — Total: ${total}`, "success");
+    } catch (e) {
+      console.error(e);
+      toast(e?.message || "Failed to stop task", "error");
+    }
+  }
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setErr(null);
     try {
-      const {items} = await tasksAPI.list({ limit: 200, offset: 0 });
-      setTasks(items.map(hydrateTask));
+      const res = await tasksAPI.list({ limit: 200, offset: 0 });
+      const rows = Array.isArray(res) ? res : (res?.items ?? []);
+      setTasks(rows.map(hydrateTask));
     } catch (e) {
       console.error(e);
       setErr(e?.message || "Failed to load tasks");
+      toast("Failed to load tasks!", "warning");
     } finally {
       setLoading(false);
     }
@@ -527,7 +679,7 @@ export default function TodoView({ onPickTask }) {
     return list;
   }, [tasks, status, project, tag, query, sort]);
 
-  const allVisibleIds = useMemo(() => new Set(visible.map((t) => t.id)), [visible]);
+  const allVisibleIds = useMemo(() => new Set((visible ?? []).map((t) => t.id)), [visible]);
   const anySelectedVisible = [...selected].some((id) => allVisibleIds.has(id));
   const allVisibleSelected = visible.length > 0 && visible.every((t) => selected.has(t.id));
 
@@ -620,6 +772,10 @@ export default function TodoView({ onPickTask }) {
               onDelete={handleDelete}
               onPick={onPickTask}
               onEdit={(task) => setEditing(task)}
+              onStart={startTask}
+              onPause={pauseTask}
+              onStop={stopTask}
+              paused={pausedIds.has(t.id)}
             />
           ))
         )}

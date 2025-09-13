@@ -5,4 +5,8 @@ export const tasksAPI = {
   create:(p)    => window.tm.tasks.create(p),
   update:(p)    => window.tm.tasks.update(p),
   delete:(id)   => window.tm.tasks.delete(id),
+  start: (id)   => window.tm.tasks.start(id),
+  pause: (id)   => window.tm.tasks.pause(id),
+  stop:  (id)   => window.tm.tasks.stop(id),
 };
+
