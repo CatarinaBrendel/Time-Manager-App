@@ -6,10 +6,10 @@ const { openDatabase } = require('./db/database');
 const { ensureMigrations } = require('./db/migrate');
 const { TasksRepo } = require('./repos/tasksRepo');
 const { TagsRepo } = require('./repos/tagsRepo');
-const { SessionsRepo } = require('./repos/sessionsRepo');
 const { registerTasksIpc } = require('./ipc/tasksIpc');
-const { registerSessionsIpc } = require('./ipc/sessionsIpc');
+const { registerProjectsIpc } = require('./ipc/projectsIpc');
 const { log } = require('./util/logger');
+const { ProjectsRepo } = require('./repos/projectsRepo');
 
 function initBackend(app, ipcMain) {
   let db, dbPath, volatile = false;
@@ -31,19 +31,18 @@ function initBackend(app, ipcMain) {
 
   const repos = {
     tasks: TasksRepo(db),
-    sessions: SessionsRepo(db),
     tags: TagsRepo(db),
+    projects: ProjectsRepo(db),
   };
 
   // Avoid duplicates during hot reload
   [
     'tm.tasks.create','tm.tasks.update','tm.tasks.get','tm.tasks.list','tm.tasks.delete',
-    'tm.sessions.start','tm.sessions.stop','tm.sessions.pause','tm.sessions.resume',
-    'tm.sessions.current','tm.sessions.summary','ping'
+    'tm.tags.list', 'tm.projects.list', 'tm.projects.ensure', 'ping'
   ].forEach(ch => ipcMain.removeHandler(ch));
 
   registerTasksIpc(ipcMain, repos);
-  registerSessionsIpc(ipcMain, repos);
+  registerProjectsIpc(ipcMain, repos);
   ipcMain.handle('ping', () => 'pong');
 
   log('Backend ready. DB:', dbPath, volatile ? '(in-memory)' : '');

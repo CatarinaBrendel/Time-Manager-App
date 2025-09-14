@@ -59,6 +59,14 @@ export default function TaskDetailsCard({ task }) {
       </div>
 
       <div className="mt-3">
+        <Field label="Project">
+          <p className="text-sm text-gray-700">
+            {task.projectName?.trim() || "(No project has been selected)"}
+          </p>
+        </Field>
+      </div>
+
+      <div className="mt-3">
         <Field label="Description">
           <p className="text-sm text-gray-700">
             {task.description?.trim() || "(No description yet)"}

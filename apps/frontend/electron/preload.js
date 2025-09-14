@@ -26,6 +26,10 @@ try {
     tags: {
       list: () => ipcRenderer.invoke('tm.tags.list'),
     },
+    projects: {
+      list: () => ipcRenderer.invoke('tm.projects.list'),
+      ensure: (name) => ipcRenderer.invoke('tm.projects.ensure', name),
+    },
     _debug: () => 'preload-ok'
   });
   console.log('[preload] exposed window.tm');

@@ -85,6 +85,7 @@ function hydrateTask(dbTask = {}) {
     projectId: dbTask.project_id ?? "",
     priorityId: dbTask.priority_id ?? null,
     companyId: dbTask.company_id ?? null,
+    projectName: dbTask.project ?? "",
 
     // UI convenience
     priority: uiPriority,
@@ -284,6 +285,11 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
               Paused
             </span>
           )}
+          {!done && inProgress && task.effective_sec != null && (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px]">
+              Worked: {formatDuration(task.effective_sec)}
+            </span>
+          )}
         </div>
         {/* second line: project/tag/time/priority */}
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
@@ -291,11 +297,6 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-full" style={{ background: proj.color }} />
               {proj.name}
-            </span>
-          )}
-          {!done && inProgress && task.effective_sec != null && (
-            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5">
-              Worked: {formatDuration(task.effective_sec)}
             </span>
           )}
 
@@ -308,9 +309,9 @@ function TaskRow({ task, selected, onToggleSelected, onToggleDone, onDelete, onP
             />
             {task.tags?.length ? (
               <span className="flex flex-wrap gap-1">
-                {task.tags.map((t) => (
+                {task.tags.map((t,i) => (
                   <span
-                    key={t}
+                    key={`${t}-${i}`}
                     className="rounded-full bg-platinum px-2 py-0.5 text-[10px]"
                   >
                     #{t}
@@ -463,7 +464,8 @@ export default function TodoView({ onPickTask }) {
       toast(`Started "${task.title}"`, "success");
     } catch (e) {
       console.error(e);
-      toast(e?.message || "Failed to start task", "error");
+      //toast(e?.message || "Failed to start task", "error");
+      toast("Check if another task is in session!", "error");
     }
   }
 
@@ -769,7 +771,7 @@ export default function TodoView({ onPickTask }) {
             {err ? err : "No tasks match your filters."}
           </div>
         ) : (
-          visible.map((t) => (
+          visible.filter(Boolean).map((t) => (
             <TaskRow
               key={t.id}
               task={t}
@@ -795,7 +797,7 @@ export default function TodoView({ onPickTask }) {
             id: editing.id,
             title: editing.title,
             description: editing.description,
-            project: editing.projectIdName || "", // if you have names later
+            project: editing.projectName || editing.project || "",
             priority: ["low","medium","high","urgent"][editing.priority] || "low",
             tags: editing.tags || [],
             dueDate: editing.due_at || null,
@@ -820,7 +822,18 @@ export default function TodoView({ onPickTask }) {
               eta_sec: p.eta_sec,
             });
 
-            setTasks((prev) => prev.map((t) => (t.id === updated.id ? hydrateTask(updated) : t)));
+            if (updated && typeof updated === "object" && updated.id) {
+              const h = hydrateTask(updated);
+              setTasks(prev => prev.map(t => (t?.id === h.id ? h : t)));
+            } else if (Number.isFinite(updated)) {
+              const row = await tasksAPI.get(updated);
+              const h = hydrateTask(row);
+              setTasks(prev => prev.map(t => (t?.id === h.id ? h : t)));
+            } else {
+              // Fallback if nothing returned
+              await refresh();
+            }
+
             setEditing(null);
             toast("Task updated", "success");
           } catch (e) {

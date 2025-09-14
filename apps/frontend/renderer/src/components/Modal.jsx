@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { tagsAPI } from "../lib/taskAPI";
+import { projectsAPI } from "../lib/projectsAPI";
 
 // ---- ChipInput stays the same as in your current modal ----
 function ChipInput({ label, placeholder, mode = "multi", value, onChange, suggestions = [] }) {
@@ -166,7 +167,8 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
   const today = new Date().toISOString().split("T")[0];
   const [title, setTitle] = useState(safeInitial.title ?? "");
   const [description, setDescription] = useState(safeInitial.description ?? "");
-  const [project, setProject] = useState(safeInitial.project ?? "");
+  const [project, setProject] = useState(safeInitial.project ?? ""); // project NAME
+  const [allProjects, setAllProjects] = useState([]); // [{id,name}]
   const [priority, setPriority] = useState((safeInitial.priority ?? "low").toLowerCase());
   const [tags, setTags] = useState(Array.isArray(safeInitial.tags) ? safeInitial.tags : []);
   const [due, setDue] = useState(safeInitial.dueDate ?? safeInitial.due_at ?? today);
@@ -212,19 +214,48 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
     })();
   }, []);
 
+  // load projects when opened (never throw, never set undefined)
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    (async () => {
+      const rows = await projectsAPI.list();          // always [] on failure
+      if (!alive) return;
+      setAllProjects(Array.isArray(rows) ? rows : []);
+    })();
+    return () => { alive = false; };
+  }, [open]);
+
   if (!open) return null;
 
   const valid = title.trim().length > 0;
-  const payload = {
-    ...(safeInitial.id ? { id: safeInitial.id } : {}),
-    title: title.trim(),
-    description: description.trim() || "",
-    project: project || null,       // string; your repo can resolve later
-    priority,                       // 'low'|'medium'|'high'|'urgent'
-    tags,
-    dueDate: due || null,           // yyyy-mm-dd
-    eta_sec: (etaMin === "" || etaMin == null ? null : Math.max(0, parseInt(etaMin, 10)) * 60),
-  };
+
+  async function handleSubmit() {
+    if (!valid) return;
+    // Resolve/create project by name → get its id
+    const trimmedProject = String(project || "").trim();
+    let project_id = null;
+    if (trimmedProject) {
+      project_id = await projectsAPI.ensure(trimmedProject); // null if API missing/failed
+    }
+
+    const payload = {
+      ...(safeInitial.id ? { id: safeInitial.id } : {}),
+      title: title.trim(),
+      description: description.trim() || "",
+      priority,                  // 'low'|'medium'|'high'|'urgent'
+      tags,
+      dueDate: due || null,      // yyyy-mm-dd
+      eta_sec:
+        etaMin === "" || etaMin == null
+          ? null
+          : Math.max(0, parseInt(etaMin, 10)) * 60,
+      project_id,                // may be null; backend defaults cover this
+      project: trimmedProject || null, // (optional) label for UI
+    };
+
+    await onSubmit?.(payload);
+  }
 
   const ui = (
     <div className="fixed inset-0 z-[1000] grid place-items-center bg-black/40">
@@ -257,7 +288,16 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
 
           {/* Project + Priority */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <ChipInput label="Project" placeholder="Type project and Enter" mode="single" value={project} onChange={setProject} />
+            <ChipInput
+              label="Project"
+              placeholder="Select or create a project…"
+              mode="single"
+              value={project}                 // string (name)
+              onChange={setProject}
+              suggestions={(allProjects ?? [])
+                .map(p => (typeof p === "string" ? p : (p?.name ?? "")))
+                .map(s => s.trim()).filter(Boolean)}
+            />
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">Priority</label>
               <select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -352,7 +392,7 @@ export function Modal({ open, mode = "create", initial = {}, onClose, onSubmit }
         <div className="flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4">
           <button onClick={onClose} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-black hover:bg-platinum">Cancel</button>
           <button
-            onClick={() => onSubmit?.(payload)}
+            onClick={handleSubmit}
             disabled={!valid}
             className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           >

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, nativeTheme } = require("electron");
 const path = require("node:path");
 
 const {initBackend} = require("./backend/index");
@@ -7,11 +7,13 @@ const isDev = !!process.env.VITE_DEV_SERVER_URL; // set by your dev script
 let win;
 
 function createWindow() {
+  nativeTheme.themeSource = 'light';
   win = new BrowserWindow({
     width: 1200,
-    height: 800,
+    height: 840,
     icon: path.join(__dirname, "../build/icon.png"),
     title: "Time Manager Dashboard",
+    backgroundColor: '#fff',
     webPreferences: {
       preload: require('node:path').join(__dirname, 'preload.js'),
       contextIsolation: true,

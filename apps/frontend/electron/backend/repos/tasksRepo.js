@@ -38,6 +38,35 @@ function TasksRepo(db) {
     };
   };
 
+  // helpers (top of tasksRepo.js)
+  const getPriorityIdByLabel = db.prepare(
+    `SELECT id FROM priorities WHERE LOWER(label)=LOWER(?) LIMIT 1`
+  );
+  const ensureDefaults = () => {
+    // seed priorities if table is empty (saves you from missing seeds in dev)
+    const c = db.prepare(`SELECT COUNT(*) AS n FROM priorities`).get().n;
+    if (!c) {
+      db.prepare(`INSERT INTO priorities(label,weight) VALUES 
+        ('low',1),('medium',2),('high',3),('urgent',4)`).run();
+    }
+  };
+  const toNullableId = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  ensureDefaults();
+ 
+  const getTagIdByName = db.prepare(`SELECT id FROM tags WHERE LOWER(name)=LOWER(?) LIMIT 1`);
+  const insertTag       = db.prepare(`INSERT INTO tags (name) VALUES (?)`);
+  function ensureTagId(name) {
+    const n = String(name || '').trim();
+    if (!n) return null;
+    const got = getTagIdByName.get(n);
+    if (got?.id) return got.id;
+    return insertTag.run(n).lastInsertRowid;
+  }
+
   const nowIso = () => new Date().toISOString();
 
   // -----------------------------
@@ -110,25 +139,36 @@ function TasksRepo(db) {
   // CRUD (base tables)
   // -----------------------------
   const insertTask = db.prepare(`
-    INSERT INTO tasks (project_id, title, description, status, priority_id, eta_sec, due_at, started_at, ended_at, created_by)
-    VALUES (@project_id, @title, @description, COALESCE(@status,'todo'), @priority_id, @eta_sec, @due_at, @started_at, @ended_at, @created_by)
+    INSERT INTO tasks (
+      project_id, title, description, status,
+      priority_id, eta_sec, due_at,
+      started_at, ended_at,
+      created_at, updated_at
+    ) VALUES (
+      @project_id, @title, @description, COALESCE(@status,'todo'),
+      @priority_id, @eta_sec, @due_at,
+      @started_at, @ended_at,
+      @now, @now
+    )
   `);
 
   const updateTask = db.prepare(`
-    UPDATE tasks
-    SET
-      project_id  = COALESCE(@project_id, project_id),
-      title       = COALESCE(@title, title),
+    UPDATE tasks SET
+      project_id  = COALESCE(@project_id,  project_id),
+      title       = COALESCE(@title,       title),
       description = COALESCE(@description, description),
-      status      = COALESCE(@status, status),
+      status      = COALESCE(@status,      status),
       priority_id = COALESCE(@priority_id, priority_id),
-      eta_sec     = COALESCE(@eta_sec, eta_sec),
-      due_at      = COALESCE(@due_at, due_at),
-      started_at  = COALESCE(@started_at, started_at),
-      ended_at    = COALESCE(@ended_at, ended_at),
+      eta_sec     = COALESCE(@eta_sec,     eta_sec),
+      due_at      = COALESCE(@due_at,      due_at),
+      started_at  = COALESCE(@started_at,  started_at),
+      ended_at    = COALESCE(@ended_at,    ended_at),
       updated_at  = @now
     WHERE id = @id
   `);
+
+    // Return the enriched view row (adjust view name/columns if different)
+  const getTaskView = db.prepare(`SELECT * FROM v_task_overview WHERE task_id = ?`);
 
   const deleteTask = db.prepare(`DELETE FROM tasks WHERE id = ?`);
 
@@ -199,19 +239,32 @@ function TasksRepo(db) {
   `);
 
   const txStart = db.transaction(({ task_id, now }) => {
-    // Is there already an open focus session?
-    const open = getOpenFocus.get({ task_id });
+    // 0) Ensure no other open focus sessions conflict with the "one open" rule
+    const open = findOpenFocusAny.all();
+    for (const s of open) {
+      if (s.task_id === task_id) continue; // same task: will resume below
 
-    if (open) {
-      // We're "resuming": just close any open pause on that session.
+      // If another task has an *open paused* session, close it cleanly
+      const paused = !!hasOpenPauseBySession.get(s.id);
+      if (paused) {
+        closePauseBySession.run({ session_id: s.id, now });
+        closeFocusById.run({ session_id: s.id, now });
+      } else {
+        // Another task is actively running -> ask user to pause/stop it first
+        throw new Error('Another task is currently running. Please pause or stop it first.');
+      }
+    }
+
+    // 1) For the current task: resume if session exists, else open a new one
+    const openCurrent = getOpenFocus.get({ task_id });
+    if (openCurrent) {
+      // resume = close open pause on this session
       closeOpenPause.run({ task_id, now });
-      // keep the same focus session; no new session row
     } else {
-      // We're "starting" fresh: open a focus session.
       openFocus.run({ task_id, now });
     }
 
-    // In both cases, enforce status
+    // 2) Ensure status is "in progress"
     setStatus.run({ task_id, status: 'in progress', now });
   });
 
@@ -236,6 +289,36 @@ function TasksRepo(db) {
     setStatus.run({ task_id, status: 'done', now });
   });
 
+  // Find any open focus sessions (global)
+  const findOpenFocusAny = db.prepare(`
+    SELECT id, task_id
+    FROM sessions
+    WHERE kind='focus' AND ended_at IS NULL
+  `);
+
+  // Is a given session currently paused? (has an open pause row)
+  const hasOpenPauseBySession = db.prepare(`
+    SELECT 1
+    FROM session_pauses
+    WHERE session_id = ? AND ended_at IS NULL
+    LIMIT 1
+  `);
+
+  // Close pause by session id
+  const closePauseBySession = db.prepare(`
+    UPDATE session_pauses
+    SET ended_at = @now
+    WHERE session_id = @session_id AND ended_at IS NULL
+  `);
+
+  // Close focus session by id
+  const closeFocusById = db.prepare(`
+    UPDATE sessions
+    SET ended_at = @now
+    WHERE id = @session_id AND ended_at IS NULL
+  `);
+
+
   // -----------------------------
   // Public API
   // -----------------------------
@@ -252,45 +335,66 @@ function TasksRepo(db) {
   }
 
   const txCreate = db.transaction((payload) => {
-    const now = nowIso();
-    const toInsert = {
-      project_id: payload.project_id ?? null,
-      title: (payload.title || "").trim(),
-      description: (payload.description || "") || "",
-      status: payload.status || 'todo',
-      priority_id: payload.priority_id ?? null,
-      eta_sec: payload.eta_sec ?? null,
-      due_at: payload.due_at ?? null,
-      started_at: payload.started_at ?? null,
-      ended_at: payload.ended_at ?? null,
-      created_by: payload.created_by ?? null,
-    };
-    const r = insertTask.run(toInsert);
-    const taskId = r.lastInsertRowid;
+    const now = new Date().toISOString();
 
-    // tags
-    const tags = Array.from(new Set(payload.tags || [])).filter(Boolean);
-    for (const name of tags) {
-      const tagId = ensureTagId(name);
-      linkTag.run(taskId, tagId);
+    // Normalize inputs
+    let project_id  = toNullableId(payload.project_id);
+    let priority_id = toNullableId(payload.priority_id);
+    if (!priority_id && payload.priority) {
+      const row = getPriorityIdByLabel.get(String(payload.priority));
+      priority_id = row?.id ?? null;
     }
-    return taskId;
+
+    const eta_sec  = Number.isFinite(Number(payload.eta_sec)) ? Number(payload.eta_sec) : null;
+    const due_at   = payload.due_at ?? null;
+
+    const title = String(payload.title || '').trim();
+    const description = String(payload.description || '');
+    if (!title) throw new Error('Title required');
+
+    // Insert task (pass ALL named params)
+    const res = insertTask.run({
+      project_id,
+      title,
+      description,
+      status: null,          // keep via COALESCE -> 'todo'
+      priority_id,
+      eta_sec,
+      due_at,
+      started_at: null,
+      ended_at: null,
+      now,
+    });
+    const task_id = Number(res.lastInsertRowid);
+
+    // Tags
+    if (Array.isArray(payload.tags) && payload.tags.length) {
+      const uniq = [...new Set(payload.tags.map(String))];
+      for (const name of uniq) {
+        const tagId = ensureTagId(name);
+        if (tagId) linkTag.run(task_id, tagId);
+      }
+    }
+
+    return task_id;
   });
 
+  // Public create() wrapper that returns the view row
   function create(payload) {
     const id = txCreate(payload);
-    return get(id);
+    return getTaskView.get(id);
   }
 
   const txUpdate = db.transaction((payload) => {
-    const now = nowIso();
-    // supply ALL named params your UPDATE references
+    const now = new Date().toISOString();
+
+    // Provide defaults for every named param referenced in updateTask
     const defaults = {
       id: null,
       project_id: null,
       title: null,
       description: null,
-      status: null,        // << important: present, but null
+      status: null,        // status stays unchanged unless explicitly set (Start/Stop manage it)
       priority_id: null,
       eta_sec: null,
       due_at: null,
@@ -299,16 +403,43 @@ function TasksRepo(db) {
       now,
     };
 
-    updateTask.run({ ...defaults, ...payload, now });
-    if (payload.tags) {
+    // Normalize FKs
+    let project_id  = toNullableId(payload.project_id);
+    let priority_id = toNullableId(payload.priority_id);
+    if (!priority_id && payload.priority) {
+      const row = getPriorityIdByLabel.get(String(payload.priority));
+      priority_id = row?.id ?? null;
+    }
+
+    const eta_sec  = Number.isFinite(Number(payload.eta_sec)) ? Number(payload.eta_sec) : null;
+    const data = {
+      ...defaults,
+      ...payload,
+      project_id,
+      priority_id,
+      eta_sec,
+      now,
+    };
+
+    updateTask.run(data);
+
+    // Tags: if tags provided, replace set
+    if (Array.isArray(payload.tags)) {
       unlinkAllTags.run(payload.id);
-      const names = Array.from(new Set(payload.tags)).filter(Boolean);
-      for (const name of names) {
+      const uniq = [...new Set(payload.tags.map(String))];
+      for (const name of uniq) {
         const tagId = ensureTagId(name);
-        linkTag.run(payload.id, tagId);
+        if (tagId) linkTag.run(payload.id, tagId);
       }
     }
   });
+
+  // Public update() wrapper that returns the view row
+  function update(payload) {
+    txUpdate(payload);
+    return getTaskView.get(payload.id);
+  }
+
 
   function update(payload) {
     txUpdate(payload);
