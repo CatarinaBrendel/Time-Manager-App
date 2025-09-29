@@ -58,7 +58,7 @@ export default function Sidebar({
     return () => window.removeEventListener("keydown", handler);
   }, [toggle]);
 
-  const width = collapsed ? 75 : 200;
+  const width = collapsed ? 75 : 180;
   const containerClasses = "relative z-30 h-full bg-oxford-blue text-white/90 border-r border-white/10 flex flex-col";
 
   const renderItem = useCallback(

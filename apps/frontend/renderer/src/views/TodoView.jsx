@@ -32,12 +32,6 @@ const projects = [
 const cx = (...c) => c.filter(Boolean).join(" ");
 const getProject = (id) => projects.find((p) => p.id === id);
 const PRIORITY_LABEL = { 0: "Low", 1: "Med", 2: "High", 3: "Urgent" };
-const STATUS_OPTIONS = [
-  { key: "all", label: "All" },
-  { key: "todo", label: "To-Do" },
-  { key: "in progress", label: "In Progress" },
-  { key: "done", label: "Done" },
-];
 
 // ---- DB <-> UI status mapping ----
 const dbToUiStatus = (s) => s || "todo";
@@ -45,11 +39,20 @@ const dbToUiStatus = (s) => s || "todo";
 // Fill UI-only fields for DB tasks
 function hydrateTask(dbTask = {}) {
   const uiPriorityByLabel = { low: 0, medium: 1, high: 2, urgent: 3 };
-  const uiPriority =
-    uiPriorityByLabel[String(dbTask.priority || "").toLowerCase()] ??
-    // fallback via weight (lower weight = higher priority)
-    (Number.isFinite(dbTask.priority_weight) ? Math.max(0, 3 - Number(dbTask.priority_weight)) : 0);
+  const uiPriorityById = {1: 0, 2: 1, 3: 2, 4: 3};
 
+  // 1) try label
+  let uiPriority = uiPriorityByLabel[String(dbTask.priority || "").toLowerCase()];
+
+  // 2) fallback via weight
+  if (uiPriority == null && Number.isFinite(dbTask.priority_weight)) {
+    uiPriority = Math.max(0, 3 - Number(dbTask.priority_weight));
+  }
+
+  // 3) fallback via priority_id (fixes your bug)
+  if (uiPriority == null && Number.isFinite(dbTask.priority_id)) {
+    uiPriority = uiPriorityById[Number(dbTask.priority_id)];  // 1..4 -> 0..3
+  }
   
   // Accept tags from various shapes: array | stringified JSON | null/undefined
   let raw = dbTask.tags ?? dbTask.tags_json ?? dbTask.tags_csv ?? [];
@@ -89,7 +92,7 @@ function hydrateTask(dbTask = {}) {
     projectName: dbTask.project ?? "",
 
     // UI convenience
-    priority: uiPriority,
+    priority: uiPriority ?? 0,
     etaMin,
 
     total_sec:     Number(dbTask.total_sec ?? 0),
@@ -433,7 +436,12 @@ export default function TodoView({ onPickTask }) {
   }, []);
 
   async function handleAdd(text) {
-    const created = await tasksAPI.create({ title: text, description: "", due_at: null, tags: [] });
+    const created = await tasksAPI.create({ 
+      title: text, 
+      description: "", 
+      due_at: todayLocalDateOnly(), 
+      priority_id: 4,
+      tags: [] });
 
     try {
       if (created && typeof created === 'object' && created.id) {
@@ -744,4 +752,12 @@ export default function TodoView({ onPickTask }) {
       />
     </div>
   );
+}
+
+function todayLocalDateOnly() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
