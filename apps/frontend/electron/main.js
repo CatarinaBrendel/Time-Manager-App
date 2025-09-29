@@ -10,7 +10,7 @@ function createWindow() {
   nativeTheme.themeSource = 'light';
   win = new BrowserWindow({
     width: 1320,
-    height: 880,
+    height: 905,
     icon: path.join(__dirname, "../build/icon.png"),
     title: "Time Manager Dashboard",
     backgroundColor: '#fff',

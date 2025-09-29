@@ -1,5 +1,6 @@
 // views/ReportsView.jsx
 import React, { useEffect, useMemo, useState, useReducer } from "react";
+import { createPortal } from "react-dom";
 import { reportsAPI } from "../lib/reportsAPI";
 import { projectsAPI } from "../lib/projectsAPI";
 import Toolbar, { STATUS_OPTIONS as DEFAULT_STATUS_OPTIONS } from "../ui/Toolbar";
@@ -24,7 +25,7 @@ function reducer(state, action) {
 // Toolbar keys -> DB columns
 const mapSortKey = (k) => (k === "priority" ? "effective_sec" : k === "eta" ? "due_at" : k);
 
-// For a small label only (backend handles filtering)
+// Time scope (flat list)
 function periodRange(period) {
   const now = new Date();
   const sod = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -132,6 +133,14 @@ export default function ReportsView() {
 
   // pagination
   const pageCount = Math.max(1, Math.ceil((data?.totalCount ?? 0) / (pageSize || 10)));
+  const pages = useMemo(() => {
+    const p = page || 1, t = pageCount, d = 1, out = [];
+    const L = Math.max(1, p - d), R = Math.min(t, p + d);
+    if (L > 1) out.push(1); if (L > 2) out.push("…");
+    for (let i=L;i<=R;i++) out.push(i);
+    if (R < t - 1) out.push("…"); if (R < t) out.push(t);
+    return out;
+  }, [page, pageCount]);
 
   // tiny helpers
   const priorityLabel = (p) => (p==null ? "—" : (typeof p==="number" ? ({1:"Low",2:"Medium",3:"High",4:"Urgent"}[p] || String(p)) :
