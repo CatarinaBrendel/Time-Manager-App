@@ -1,349 +1,224 @@
 // views/ReportsView.jsx
 import React, { useEffect, useMemo, useState, useReducer } from "react";
-import {createPortal} from "react-dom";
 import { reportsAPI } from "../lib/reportsAPI";
 import { projectsAPI } from "../lib/projectsAPI";
 import Toolbar, { STATUS_OPTIONS as DEFAULT_STATUS_OPTIONS } from "../ui/Toolbar";
 import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { formatDuration } from "../helpers/helpersFunctions";
+import PaginationBar from "../ui/PaginationBar";
+import HoverTitle from "../ui/HoverTitle";
 
-// Debounce helper
+/* ------------------------- utilities ------------------------- */
 function useDebounced(value, delay = 250) {
   const [v, dispatch] = useReducer((_, x) => x, value);
-  useEffect(() => {
-    const id = setTimeout(() => dispatch(value), delay);
-    return () => clearTimeout(id);
-  }, [value, delay]);
+  useEffect(() => { const id = setTimeout(() => dispatch(value), delay); return () => clearTimeout(id); }, [value, delay]);
   return v;
 }
 
-const initial = {
-  period: "daily",
-  query: "",
-  sortKey: "due_at",
-  dir: "ASC",
-  page: 1,
-  status: "all",
-  project: "",
-  tag: "",
-  priority: ""
-};
-
+const initial = { period: "daily", query: "", sortKey: "due_at", dir: "ASC", page: 1, status: "all", project: "", tag: "", priority: "" };
 function reducer(state, action) {
-  switch (action.type) {
-    case "patch":
-      return { ...state, ...action.patch };
-    case "patchReset":
-      return { ...state, ...action.patch, page: 1 };
-    default:
-      return state;
-  }
+  if (action.type === "patch") return { ...state, ...action.patch };
+  if (action.type === "patchReset") return { ...state, ...action.patch, page: 1 };
+  return state;
 }
-
-// map Toolbar sort keys -> repo columns
+// Toolbar keys -> DB columns
 const mapSortKey = (k) => (k === "priority" ? "effective_sec" : k === "eta" ? "due_at" : k);
 
+// For a small label only (backend handles filtering)
+function periodRange(period) {
+  const now = new Date();
+  const sod = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const som = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+  const soy = (d) => new Date(d.getFullYear(), 0, 1);
+
+  let from = null, to = null, label = "All time";
+  switch (period) {
+    case "daily":   from = sod(now); to = new Date(from); to.setDate(to.getDate() + 1);
+                    label = new Intl.DateTimeFormat(undefined,{ dateStyle:"full"}).format(now); break;
+    case "monthly": from = som(now); to = new Date(now.getFullYear(), now.getMonth()+1, 1);
+                    label = new Intl.DateTimeFormat(undefined,{ month:"long", year:"numeric"}).format(now); break;
+    case "yearly":  from = soy(now); to = new Date(now.getFullYear()+1, 0, 1);
+                    label = String(now.getFullYear()); break;
+    default:        /* all */
+  }
+  return { fromISO: from?.toISOString(), toISO: to?.toISOString(), label };
+}
+
+/* --------------------- tiny presentational ------------------- */
+const Loading = () => <div className="p-8 text-center text-slate-500">Loading…</div>;
+const Empty   = ({ msg="No tasks" }) => <div className="p-8 text-center text-slate-500">{msg}</div>;
+
+function PeriodBar({ period, onChange }) {
+  const opts = [{k:"daily",label:"Daily"},{k:"monthly",label:"Monthly"},{k:"yearly",label:"Yearly"},{k:"all",label:"All"}];
+  return (
+    <>
+      <div className="mx-auto max-w-6xl mt-2 mb-1 rounded-xl border border-platinum bg-white p-1 shadow-sm">
+        <div className="inline-flex items-center gap-1">
+          {opts.map(o=>(
+            <button key={o.k}
+              onClick={()=>onChange(o.k)}
+              className={"px-3 py-1.5 text-sm rounded-lg "+(period===o.k?"bg-oxford-blue text-white":"text-oxford-blue/80 hover:bg-platinum/60")}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="mx-auto max-w-6xl mb-2 text-xs text-slate-500">{periodRange(period).label}</div>
+    </>
+  );
+}
+
+function Row({ r, dateFmt, statusStyle, priorityClass, priorityLabel}) {
+  return (
+    <div className="grid grid-cols-[1.6fr_0.6fr_0.4fr_0.8fr_0.4fr] px-5 py-2 items-center border-b border-slate-200 last:border-b-0">
+      <div className="min-w-0"><HoverTitle title={r.title} subtitle={r.project ? `Project: ${r.project}` : undefined} /></div>
+      <div className="text-sm text-slate-700 text-center">{formatDuration(r.effective_sec)}</div>
+      <div><span className={`text-xs px-2 py-1 rounded-md border text-center ${statusStyle(r.status)}`}>{r.status || "—"}</span></div>
+      <div className="text-sm text-slate-700 text-center">{r.due_at ? dateFmt.format(new Date(r.due_at)) : "–"}</div>
+      <div className={`gap-1 rounded-md border px-2 py-1 text-xs text-center ${priorityClass(r.priority)}`}>{priorityLabel(r.priority)}</div>
+    </div>
+  );
+}
+
+/* --------------------------- main ---------------------------- */
 export default function ReportsView() {
   const [params, dispatch] = useReducer(reducer, initial);
   const { period, query, sortKey, dir, page, status, project, tag, priority } = params;
+  const setAndReset = (patch) => dispatch({ type: "patchReset", patch });
+  const setPage = (p) => dispatch({ type: "patch", patch: { page: typeof p === "function" ? p(page) : p } });
+
   const pageSize = 10;
   const queryDeb = useDebounced(query, 250);
 
-  const [data, setData] = useState({ rows: [], totalCount: 0, page: 1, pageSize, totals: {total_worked_sec: 0, total_paused_sec: 0} });
+  const [data, setData] = useState({ rows: [], totalCount: 0, page: 1, pageSize, totals: { total_worked_sec: 0, total_paused_sec: 0 } });
   const [loading, setLoading] = useState(false);
-
-  // populates the project sorting field
   const [projects, setProjects] = useState([]);
   const NO_PROJECT = "__none__";
+
+  useEffect(() => { (async () => {
+      try { const rows = await projectsAPI.list(); setProjects(Array.isArray(rows) ? rows : []); }
+      catch { setProjects([]); }
+    })();
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await projectsAPI.list();
-        if (!cancelled) setProjects(Array.isArray(rows) ? rows : []);
-      } catch (e) {
-        console.warn("projectsAPI.list failed", e);
-        if (!cancelled) setProjects([]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  // fetching the data
-  useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      try {
         setLoading(true);
         const res = await reportsAPI.list({
-          period,
-          page,
-          pageSize,
-          sort: sortKey,
-          dir,
+          period, page, pageSize, sort: sortKey, dir,
           filters: {
             title: queryDeb,
             status: status === "all" ? "" : status,
             projectId: project && project !== NO_PROJECT ? project : undefined,
             noProject: project === NO_PROJECT ? true : undefined,
             tag: tag || undefined,
-            priority: priority || undefined
-          },
+            priority: priority || undefined,
+          }
         });
         if (!cancelled) setData(res);
       } catch (err) {
         console.error("reports.list failed", err);
-        if (!cancelled) {
-          setData((d) => ({ ...d, rows: [], totalCount: 0 }));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    run();
-    return () => {
-      cancelled = true;
-    };
-    // include every input that changes the query
+        if (!cancelled) setData((d) => ({ ...d, rows: [], totalCount: 0 }));
+      } finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
   }, [period, page, pageSize, sortKey, dir, queryDeb, status, project, tag, priority]);
 
   const items = useMemo(() => data?.rows ?? [], [data]);
-
-  // Pagination helpers
-  const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
-  const pageCount = Math.max(1, Math.ceil((data?.totalCount ?? 0) / (pageSize || 10)));
-  const pageNumbers = React.useMemo(() => {
-    const p = page || 1;
-    const t = pageCount;
-    const delta = 1; // how many neighbors to show around current page
-    const out = [];
-    const left = Math.max(1, p - delta);
-    const right = Math.min(t, p + delta);
-
-    if (left > 1) out.push(1);
-    if (left > 2) out.push("…");
-    for (let i = left; i <= right; i++) out.push(i);
-    if (right < t - 1) out.push("…");
-    if (right < t) out.push(t);
-
-    return out;
-  }, [page, pageCount]);
-
-  const setPage = (p) => dispatch({ type: "patch", patch: { page: typeof p === "function" ? p(page) : p } });
-
-  // Go-to input
-  const [gotoVal, setGotoVal] = React.useState("");
-  
+  const dateFmt = useMemo(() => new Intl.DateTimeFormat(undefined,{ day:"2-digit", month:"numeric", year:"numeric" }), []);
   const sortValue = `${sortKey}-${dir.toLowerCase()}`;
 
-  // Prefer backend totals (whole filtered dataset). Fallback to current page sum.
-  const pageWorked = useMemo(() => items.reduce((s, r) => s + (Number(r.effective_sec || 0)), 0), [items]);
-  const pagePaused = useMemo(() => items.reduce((s, r) => s + (Number(r.paused_sec || 0)), 0), [items]);
+  // pagination
+  const pageCount = Math.max(1, Math.ceil((data?.totalCount ?? 0) / (pageSize || 10)));
 
-  const totalWorkedSec = Number(data?.totals?.total_worked_sec ?? 0) || pageWorked;
-  const totalPausedSec = Number(data?.totals?.total_paused_sec ?? 0) || pagePaused;
-
-  // helpers
-  const setAndReset = (patch) => dispatch({ type: "patchReset", patch });
-  const priorityLabel = (p) => {
-    console.log("p:", p);
-    if (p == null) return "—";
-    if (typeof p === "number") {
-      return ({1:"Low",2:"Medium",3:"High",4:"Urgent"}[p] || String(p));
-    }
-    const s = String(p).trim().toLowerCase();
-    return s ? s[0].toUpperCase() + s.slice(1) : "—";
-  };
-
+  // tiny helpers
+  const priorityLabel = (p) => (p==null ? "—" : (typeof p==="number" ? ({1:"Low",2:"Medium",3:"High",4:"Urgent"}[p] || String(p)) :
+                              ((s=>s? s[0].toUpperCase()+s.slice(1):"—")(String(p).trim().toLowerCase()))));
   const priorityClass = (p) => {
-    const key = typeof p === "number" ? p :
-      ({low:1, medium:2, high:3, urgent:4}[String(p).toLowerCase()] ?? 0);
-    switch (key) {
-      case 1: return "border-slate-300 text-slate-700";
-      case 2: return "border-amber-300 text-amber-700";
-      case 3: return "border-orange-300 text-orange-700";
-      case 4: return "border-red-300 text-red-700";
-      default: return "border-slate-200 text-slate-500";
-    }
+    const key = typeof p === "number" ? p : ({low:1, medium:2, high:3, urgent:4}[String(p).toLowerCase()] ?? 0);
+    return key===1?"border-slate-300 text-slate-700":
+           key===2?"border-amber-300 text-amber-700":
+           key===3?"border-orange-300 text-orange-700":
+           key===4?"border-red-300 text-red-700":"border-slate-200 text-slate-500";
   };
 
   const counts = useMemo(() => {
     const c = { todo: 0, "in progress": 0, done: 0 };
-    for (const r of items) {
-      const s = (r.status || "").toLowerCase();
-      if (s in c) c[s] += 1;
-    }
+    for (const r of items) { const s = (r.status || "").toLowerCase(); if (s in c) c[s]++; }
     return c;
   }, [items]);
 
+  const totalWorkedSec = Number(data?.totals?.total_worked_sec ?? 0) || items.reduce((s,r)=>s+(+r.effective_sec||0),0);
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col text-slate-900 overflow-hidden">
-      {/* Toolbar (legacy props) */}
       <div className="shrink-0">
-        <div className="mx-auto max-w-6xl pb-3">
+        <PeriodBar
+          period={period}
+          onChange={(k)=> setAndReset({ period: k, sortKey: "due_at", dir: "ASC" })}
+        />
+        <div className="mx-auto max-w-6xl pb-2">
           <div className="rounded-2xl bg-white shadow-sm">
-            <div className="">
-              <Toolbar
-                query={query}
-                setQuery={(q) => setAndReset({ query: q })}
-                status={status}
-                setStatus={(s) => setAndReset({ status: s })}
-                project={project}
-                setProject={(p) => setAndReset({ project: p })}
-                tag={tag}
-                setTag={(t) => setAndReset({ tag: t })}
-                sort={sortValue}
-                setSort={(v) => {
-                  const [key, direction] = String(v).split("-");
-                  setAndReset({ sortKey: mapSortKey(key), dir: (direction || "asc").toUpperCase() });
-                }}
-                counts={counts}
-                projects={projects}
-                statusOptions={DEFAULT_STATUS_OPTIONS}
-              />
-            </div>
+            <Toolbar
+              query={query} setQuery={(q)=>setAndReset({ query:q })}
+              status={status} setStatus={(s)=>setAndReset({ status:s })}
+              project={project} setProject={(p)=>setAndReset({ project:p })}
+              tag={tag} setTag={(t)=>setAndReset({ tag:t })}
+              sort={sortValue}
+              setSort={(v)=>{ const [key, direction]=String(v).split("-"); setAndReset({ sortKey: mapSortKey(key), dir: (direction||"asc").toUpperCase() }); }}
+              counts={counts} projects={projects} statusOptions={DEFAULT_STATUS_OPTIONS}
+            />
           </div>
         </div>
       </div>
 
-      {/* Scrollable list */}
+      {/* List */}
       <div className="flex-1 min-h-0 overflow-auto rounded-2xl bg-slate-50">
         <div className="mx-auto max-w-6xl px-4 py-4">
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            {/* Header with sortable cells */}
             <div className="grid grid-cols-[1.6fr_0.6fr_0.4fr_0.8fr_0.4fr] px-5 py-2 text-sm font-medium text-slate-500 border-b border-slate-200 sticky top-0 bg-white">
               <HeaderCell label="Title" sortKey="title" sort={sortKey} dir={dir} align="left"
-                onSort={(k) => setAndReset({ sortKey: k, dir: sortKey === k && dir === "ASC" ? "DESC" : "ASC" })} />
+                onSort={(k)=>setAndReset({ sortKey:k, dir: sortKey===k && dir==="ASC" ? "DESC":"ASC" })} />
               <HeaderCell label="Worked" sortKey="effective_sec" sort={sortKey} dir={dir} align="center"
-                onSort={(k) => setAndReset({ sortKey: k, dir: sortKey === k && dir === "ASC" ? "DESC" : "ASC" })} />
+                onSort={(k)=>setAndReset({ sortKey:k, dir: sortKey===k && dir==="ASC" ? "DESC":"ASC" })} />
               <HeaderCell label="Status" sortKey="status" sort={sortKey} dir={dir} align="center"
-                onSort={(k) => setAndReset({ sortKey: k, dir: sortKey === k && dir === "ASC" ? "DESC" : "ASC" })} />
+                onSort={(k)=>setAndReset({ sortKey:k, dir: sortKey===k && dir==="ASC" ? "DESC":"ASC" })} />
               <HeaderCell label="Due Date" sortKey="due_at" sort={sortKey} dir={dir} align="center"
-                onSort={(k) => setAndReset({ sortKey: k, dir: sortKey === k && dir === "ASC" ? "DESC" : "ASC" })} />
+                onSort={(k)=>setAndReset({ sortKey:k, dir: sortKey===k && dir==="ASC" ? "DESC":"ASC" })} />
               <HeaderCell label="Priority" sortKey="priority" sort={sortKey} dir={dir} align="center"
-                onSort={(k) => setAndReset({ sortKey: k, dir: sortKey === k && dir === "ASC" ? "DESC" : "ASC" })} />
+                onSort={(k)=>setAndReset({ sortKey:k, dir: sortKey===k && dir==="ASC" ? "DESC":"ASC" })} />
             </div>
 
-            {loading && <div className="p-8 text-center text-slate-500">Loading…</div>}
-            {!loading && items.map((r) => (
-              <div key={r.id} className="grid grid-cols-[1.6fr_0.6fr_0.4fr_0.8fr_0.4fr] px-5 py-2 items-center border-b border-slate-200 last:border-b-0">
-                <div className="min-w-0">
-                  <TitleWithPopover title={r.title} subtitle={r.project ? `Project: ${r.project}` : undefined} />
-                </div>
-                <div className="text-sm text-slate-700 text-center">{formatDuration(r.effective_sec)}</div>
-                <div>
-                  <span className={`text-xs px-2 py-1 rounded-md border text-center ${statusStyle(r.status)}`}>{r.status || "—"}</span>
-                </div>
-                <div className="text-sm text-slate-700 text-center">{r.due_at ? new Date(r.due_at).toLocaleDateString() : "–"}</div>
-                <div className={`gap-1 rounded-md border px-2 py-1 text-xs text-center ${priorityClass(r.priority)}`}>
-                    {priorityLabel(r.priority)}
-                </div>
-              </div>
+            {loading ? <Loading/> :
+             items.length === 0 ? <Empty/> :
+             items.map((r)=>(
+              <Row key={r.id}
+                   r={r}
+                   dateFmt={dateFmt}
+                   statusStyle={statusStyle}
+                   priorityClass={priorityClass}
+                   priorityLabel={priorityLabel}
+              />
             ))}
-            {!loading && items.length === 0 && <div className="p-8 text-center text-slate-500">No tasks</div>}
           </div>
 
-          {/* Pagination (meta left · controls right) */}
-          <div className="mt-4">
-            <div className="mx-auto w-full">
-              <div className="rounded-2xl bg-white px-3 py-2 shadow-sm">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  {/* Meta (left) */}
-                  <div className="text-sm text-slate-500">
-                    {data.totalCount} items
-                  </div>
-
-                  {/* Controls (right) */}
-                  <div className="flex flex-wrap items-center justify-end gap-3">
-                    {/* Prev */}
-                    <button
-                      type="button"
-                      aria-label="Previous page"
-                      disabled={page <= 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      className="h-9 rounded-full px-3 text-slate-700 disabled:opacity-40"
-                    >
-                      ‹
-                    </button>
-
-                    {/* Page numbers */}
-                    <div className="flex items-center gap-2">
-                      {pageNumbers.map((n, idx) =>
-                        n === "…" ? (
-                          <span key={`e-${idx}`} className="px-2 text-slate-400 select-none">…</span>
-                        ) : (
-                          <button
-                            key={n}
-                            type="button"
-                            onClick={() => setPage(n)}
-                            className={[
-                              "min-w-[36px] rounded-full px-3 text-sm transition",
-                              n === page
-                                ? "border border-indigo-300 bg-indigo-100/80 text-indigo-700"
-                                : "text-slate-800 hover:bg-slate-50 border border-transparent"
-                            ].join(" ")}
-                            aria-current={n === page ? "page" : undefined}
-                          >
-                            {n}
-                          </button>
-                        )
-                      )}
-                    </div>
-
-                    {/* Next */}
-                    <button
-                      type="button"
-                      aria-label="Next page"
-                      disabled={page >= pageCount}
-                      onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                      className="h-9 rounded-full px-3 text-slate-700 disabled:opacity-40"
-                    >
-                      ›
-                    </button>
-
-                    <div className="mx-1 h-6 w-px bg-slate-200" />
-
-                    {/* Go to page */}
-                    <div className="flex items-center gap-2 text-sm text-slate-700">
-                      <span>Go to</span>
-                      <input
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        placeholder={String(page)}
-                        value={gotoVal}
-                        onChange={(e) => setGotoVal(e.target.value.replace(/\D+/g, ""))}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const n = clamp(parseInt(gotoVal || "0", 10) || page, 1, pageCount);
-                            setPage(n);
-                            setGotoVal("");
-                          }
-                        }}
-                        onBlur={() => {
-                          if (!gotoVal) return;
-                          const n = clamp(parseInt(gotoVal || "0", 10) || page, 1, pageCount);
-                          setPage(n);
-                          setGotoVal("");
-                        }}
-                        className="w-10 rounded-full border border-indigo-300 bg-white px-3 text-center outline-none"
-                      />
-                      <span>Page</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Pagination */}
+          <PaginationBar
+            totalCount={data.totalCount}
+            page={page}
+            pageCount={pageCount}
+            onChange={(p) => setPage(p)}
+          />
         </div>
-
-      {/* Sticky totals card */}
       </div>
+
+      {/* Totals */}
       <div className="sticky bottom-0 z-20">
         <div className="rounded-2xl mt-3 bg-white/90 backdrop-blur shadow-sm">
-          <div className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-slate-600">
-              Totals for current filters & period
-            </div>
+          <div className="flex flex-col gap-2 px-4 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-slate-600">Totals for current filters & period</div>
             <div className="flex justify-end gap-3">
               <div className="flex items-center gap-2 rounded-xl px-3 py-2">
                 <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "#10b981" }} />
@@ -352,15 +227,6 @@ export default function ReportsView() {
                   <div className="text-slate-600">{formatDuration(totalWorkedSec)}</div>
                 </div>
               </div>
-              {/*
-              <div className="flex items-center gap-2 rounded-xl px-3 py-2">
-                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "#f59e0b" }} />
-                <div className="text-sm">
-                  <div className="font-medium text-slate-800">Total Paused</div>
-                  <div className="text-slate-600">{formatDuration(totalPausedSec)}</div>
-                </div>
-              </div>
-              */}
             </div>
           </div>
         </div>
@@ -369,6 +235,7 @@ export default function ReportsView() {
   );
 }
 
+/* -------------------- styles & minor UI ---------------------- */
 function statusStyle(s) {
   if (!s) return "bg-slate-50 border-slate-200 text-slate-700";
   const v = String(s).toLowerCase();
@@ -382,113 +249,9 @@ function HeaderCell({ label, sortKey, sort, dir, onSort, align="left" }) {
   const isActive = sort === sortKey;
   const justify = align === "center" ? "justify-center text-center" : "justify-start";
   return (
-    <button
-      onClick={() => onSort(sortKey)}
-      className={`group flex items-center gap-1 text-left ${justify} ${isActive ? "text-slate-900" : "text-slate-500"}`}
-      title={`Sort by ${label}`}
-    >
+    <button onClick={()=>onSort(sortKey)} className={`group flex items-center gap-1 text-left ${justify} ${isActive ? "text-slate-900" : "text-slate-500"}`} title={`Sort by ${label}`}>
       <span>{label}</span>
-      {isActive ? (dir === "ASC" ? <ChevronUp size={14} /> : <ChevronDown size={14} />)
-                : <ChevronsUpDown size={14} className="opacity-60 group-hover:opacity-100" />}
+      {isActive ? (dir === "ASC" ? <ChevronUp size={14}/> : <ChevronDown size={14}/>) : <ChevronsUpDown size={14} className="opacity-60 group-hover:opacity-100" />}
     </button>
   );
 }
-
-// Portal hover card that doesn't close when you move from anchor -> popover
-function HoverPopover({ anchorEl, open, onEnter, onLeave, children }) {
-  if (!open || !anchorEl) return null;
-
-  const rect = anchorEl.getBoundingClientRect();
-  const pad = 12;
-  const bodyX = window.scrollX || document.documentElement.scrollLeft;
-  const bodyY = window.scrollY || document.documentElement.scrollTop;
-
-  const preferAbove = rect.top > 120;
-  const maxWidth = 420;
-  const top = (preferAbove ? rect.top : rect.bottom) + bodyY + (preferAbove ? -8 : 8);
-  let left = rect.left + bodyX + Math.min(rect.width, maxWidth) / 2 - maxWidth / 2;
-  left = Math.max(pad, Math.min(left, bodyX + window.innerWidth - maxWidth - pad));
-
-  return createPortal(
-    <div
-      role="tooltip"
-      className="rounded-xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5 pointer-events-auto"
-      style={{ position: "absolute", top, left, width: maxWidth, zIndex: 60 }}
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-    >
-      <div className="p-3 text-sm text-slate-800">{children}</div>
-    </div>,
-    document.body
-  );
-}
-
-function TitleWithPopover({ title, subtitle }) {
-  const ref = React.useRef(null);
-  const [open, setOpen] = React.useState(false);
-  const openTimer = React.useRef(null);
-  const closeTimer = React.useRef(null);
-
-  const scheduleOpen = () => {
-    clearTimeout(closeTimer.current);
-    openTimer.current = setTimeout(() => setOpen(true), 120);
-  };
-  const scheduleClose = () => {
-    clearTimeout(openTimer.current);
-    closeTimer.current = setTimeout(() => setOpen(false), 200); // slightly longer to cross the gap
-  };
-  const keepAlive = () => {
-    // Called when entering the popover: cancel any pending close
-    clearTimeout(closeTimer.current);
-  };
-
-  React.useEffect(() => {
-    const onEsc = (e) => e.key === "Escape" && setOpen(false);
-    window.addEventListener("keydown", onEsc, { passive: true });
-    return () => window.removeEventListener("keydown", onEsc);
-  }, []);
-
-  return (
-    <>
-      <div
-        ref={ref}
-        className="font-medium truncate cursor-help"
-        title={title}
-        onMouseEnter={scheduleOpen}
-        onMouseLeave={scheduleClose}
-        onFocus={() => setOpen(true)}
-        onBlur={scheduleClose}
-        tabIndex={0}
-      >
-        {title}
-      </div>
-
-      <HoverPopover
-        anchorEl={ref.current}
-        open={open}
-        onEnter={keepAlive}
-        onLeave={scheduleClose}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="font-medium text-slate-900 break-words">{title || "Untitled"}</div>
-            {subtitle ? <div className="mt-1 text-xs text-slate-600">{subtitle}</div> : null}
-          </div>
-          <button
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(title || "");
-              } catch {}
-            }}
-            className="shrink-0 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-            aria-label="Copy title"
-          >
-            Copy
-          </button>
-        </div>
-      </HoverPopover>
-    </>
-  );
-}
-
-

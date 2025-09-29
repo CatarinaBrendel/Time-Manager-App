@@ -25,39 +25,49 @@ function makeDateWindow(period) {
 
   const p = String(period).toLowerCase();
   const now = new Date();
-  const start = new Date(now);
-  const end = new Date(now);
+
+  // start = beginning of the unit; end = beginning of the next unit (half-open)
+  let start, end;
 
   switch (p) {
     case "day":
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
+    case "daily": {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      end   = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
       break;
-    case "week": {
-      const d = (start.getDay() + 6) % 7; // Mon=0
-      start.setDate(start.getDate() - d);
-      start.setHours(0, 0, 0, 0);
-      end.setTime(start.getTime());
-      end.setDate(start.getDate() + 7);
-      end.setMilliseconds(-1);
+    }
+    case "week":
+    case "weekly": {
+      // Monday-start week
+      const tmp = new Date(now);
+      const d = (tmp.getDay() + 6) % 7; // Mon=0
+      tmp.setDate(tmp.getDate() - d);
+      start = new Date(tmp.getFullYear(), tmp.getMonth(), tmp.getDate(), 0, 0, 0, 0);
+      end   = new Date(start); end.setDate(start.getDate() + 7);
       break;
     }
     case "month":
-      start.setDate(1);
-      start.setHours(0, 0, 0, 0);
-      end.setMonth(start.getMonth() + 1, 1);
-      end.setHours(0, 0, 0, 0);
-      end.setMilliseconds(-1);
+    case "monthly": {
+      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      end   = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
       break;
+    }
+    case "year":
+    case "yearly": {
+      start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      end   = new Date(now.getFullYear() + 1, 0, 1, 0, 0, 0, 0);
+      break;
+    }
     default:
       return null;
   }
 
   return {
-    start_s: Math.floor(start.getTime() / 1000), // local window start in epoch seconds
-    end_s:   Math.floor(end.getTime()   / 1000), // local window end in epoch seconds
+    start_s: Math.floor(start.getTime() / 1000),
+    end_s:   Math.floor(end.getTime()   / 1000),
   };
 }
+
 
 function ReportsRepo(db) {
   const baseWhere = (f = {}) => {
@@ -104,6 +114,7 @@ function ReportsRepo(db) {
   `;
 
   const COUNT_SQL = `SELECT COUNT(1) AS n FROM v_task_overview %WHERE%`;
+  
   const TOTALS_SQL = `
     SELECT
       COALESCE(SUM(effective_sec),0) AS total_worked_sec,
@@ -111,6 +122,17 @@ function ReportsRepo(db) {
     FROM v_task_overview
     %WHERE%
   `;
+
+  // Robust epoch cast for TEXT timestamps (supports "YYYY-MM-DD HH:MM:SS" and ISO "YYYY-MM-DDTHH:MM:SSZ")
+  const EPOCH = (col) => `
+    CAST(
+      COALESCE(
+        strftime('%s', ${col}),
+        strftime('%s', REPLACE(REPLACE(${col}, 'T', ' '), 'Z', ''))
+      ) AS INTEGER
+    )
+  `;
+
 
   return {
     list(opts = {}) {
@@ -131,14 +153,37 @@ function ReportsRepo(db) {
 
       const order = `${mapSort(opts.sort)} ${DIR(opts.dir)}`;
 
-      const rows = db.prepare(
-        LIST_SQL.replace('%WHERE%', where).replace('%ORDER%', order)
-      ).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize });
+      let whereFinal = where;
+      let paramsFinal = { ...params };
+      if (win) {
+        const whereWin = `
+          (
+            (
+              (@start_s IS NULL OR ${EPOCH('created_at')} >= @start_s) AND
+              (@end_s   IS NULL OR ${EPOCH('created_at')} <  @end_s)
+            )
+            OR
+            (
+              (@start_s IS NULL OR ${EPOCH('due_at')}     >= @start_s) AND
+              (@end_s   IS NULL OR ${EPOCH('due_at')}     <  @end_s)
+            )
+          )
+        `;
+        whereFinal = whereFinal
+          ? `${whereFinal} AND ${whereWin}`
+          : `WHERE ${whereWin}`;
+        paramsFinal = { ...paramsFinal, start_s: win.start_s, end_s: win.end_s };
+      }
 
-      const totalCount = db.prepare(COUNT_SQL.replace('%WHERE%', where)).get(params).n;
+
+      const rows = db.prepare(
+        LIST_SQL.replace('%WHERE%', whereFinal).replace('%ORDER%', order)
+      ).all({ ...paramsFinal, limit: pageSize, offset: (page - 1) * pageSize });
+
+      const totalCount = db.prepare(COUNT_SQL.replace('%WHERE%', whereFinal)).get(paramsFinal).n;
 
       // All-time totals from the view (may not be window-aware)
-      const totals = db.prepare(TOTALS_SQL.replace('%WHERE%', where)).get(params);
+      const totals = db.prepare(TOTALS_SQL.replace('%WHERE%', whereFinal)).get(paramsFinal);
 
       // If a window is active, recompute worked/paused with overlap (window-aware)
       if (win) {
