@@ -5,12 +5,14 @@ import ComingSoon from "./views/ComingSoon";
 import TodoView from "./views/TodoView";
 import PomodoroWidget from "./ui/PomodoroWidget";
 import TaskDetailsCard from "./ui/TaskDetailsCard";
+import ReportsView from "./views/ReportsView";
 
-// When you implement a view, import it and add it to ROUTE_COMPONENTS
+// When a view is implemented, import it and add it to ROUTE_COMPONENTS
 // import RealTodoView from "./views/TodoView";
 // const ROUTE_COMPONENTS = { todo: RealTodoView };
 const ROUTE_COMPONENTS = {
-  tasks: TodoView
+  tasks: TodoView,
+  reports: ReportsView,
 }; // none implemented yet
 
 const ROUTE_TITLES = {

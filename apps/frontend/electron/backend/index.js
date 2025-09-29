@@ -8,8 +8,10 @@ const { TasksRepo } = require('./repos/tasksRepo');
 const { TagsRepo } = require('./repos/tagsRepo');
 const { registerTasksIpc } = require('./ipc/tasksIpc');
 const { registerProjectsIpc } = require('./ipc/projectsIpc');
+const { registerReportsIpc } = require('./ipc/reportsIpc');
 const { log } = require('./util/logger');
 const { ProjectsRepo } = require('./repos/projectsRepo');
+const { ReportsRepo } = require('./repos/reportsRepo');
 
 function initBackend(app, ipcMain) {
   let db, dbPath, volatile = false;
@@ -33,16 +35,18 @@ function initBackend(app, ipcMain) {
     tasks: TasksRepo(db),
     tags: TagsRepo(db),
     projects: ProjectsRepo(db),
+    reports: ReportsRepo(db),
   };
 
   // Avoid duplicates during hot reload
   [
     'tm.tasks.create','tm.tasks.update','tm.tasks.get','tm.tasks.list','tm.tasks.delete',
-    'tm.tags.list', 'tm.projects.list', 'tm.projects.ensure', 'ping'
+    'tm.tags.list', 'tm.projects.list', 'tm.projects.ensure', 'tm.reports.list', 'ping'
   ].forEach(ch => ipcMain.removeHandler(ch));
 
   registerTasksIpc(ipcMain, repos);
   registerProjectsIpc(ipcMain, repos);
+  registerReportsIpc(ipcMain, repos);
   ipcMain.handle('ping', () => 'pong');
 
   log('Backend ready. DB:', dbPath, volatile ? '(in-memory)' : '');

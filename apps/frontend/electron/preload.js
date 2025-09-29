@@ -30,6 +30,9 @@ try {
       list: () => ipcRenderer.invoke('tm.projects.list'),
       ensure: (name) => ipcRenderer.invoke('tm.projects.ensure', name),
     },
+    reports: {
+      list: (opts) => ipcRenderer.invoke("tm.reports.list", opts),
+    },
     _debug: () => 'preload-ok'
   });
   console.log('[preload] exposed window.tm');
