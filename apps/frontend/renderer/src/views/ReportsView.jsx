@@ -1,6 +1,5 @@
 // views/ReportsView.jsx
 import React, { useEffect, useMemo, useState, useReducer } from "react";
-import { createPortal } from "react-dom";
 import { reportsAPI } from "../lib/reportsAPI";
 import { projectsAPI } from "../lib/projectsAPI";
 import Toolbar, { STATUS_OPTIONS as DEFAULT_STATUS_OPTIONS } from "../ui/Toolbar";
@@ -22,27 +21,16 @@ function reducer(state, action) {
   if (action.type === "patchReset") return { ...state, ...action.patch, page: 1 };
   return state;
 }
-// Toolbar keys -> DB columns
-const mapSortKey = (k) => (k === "priority" ? "effective_sec" : k === "eta" ? "due_at" : k);
+const mapSortKey = (k) => (k === "priority" ? "priority" : k === "eta" ? "due_at" : k);
 
-// Time scope (flat list)
-function periodRange(period) {
+// For header sublabel
+function periodLabel(period) {
   const now = new Date();
-  const sod = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const som = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
-  const soy = (d) => new Date(d.getFullYear(), 0, 1);
-
-  let from = null, to = null, label = "All time";
-  switch (period) {
-    case "daily":   from = sod(now); to = new Date(from); to.setDate(to.getDate() + 1);
-                    label = new Intl.DateTimeFormat(undefined,{ dateStyle:"full"}).format(now); break;
-    case "monthly": from = som(now); to = new Date(now.getFullYear(), now.getMonth()+1, 1);
-                    label = new Intl.DateTimeFormat(undefined,{ month:"long", year:"numeric"}).format(now); break;
-    case "yearly":  from = soy(now); to = new Date(now.getFullYear()+1, 0, 1);
-                    label = String(now.getFullYear()); break;
-    default:        /* all */
-  }
-  return { fromISO: from?.toISOString(), toISO: to?.toISOString(), label };
+  if (period === "daily")   return new Intl.DateTimeFormat(undefined,{ dateStyle:"full"}).format(now);
+  if (period === "weekly")  return "This week";
+  if (period === "monthly") return new Intl.DateTimeFormat(undefined,{ month:"long", year:"numeric"}).format(now);
+  if (period === "yearly")  return String(now.getFullYear());
+  return "All time";
 }
 
 /* --------------------- tiny presentational ------------------- */
@@ -50,7 +38,13 @@ const Loading = () => <div className="p-8 text-center text-slate-500">Loading…
 const Empty   = ({ msg="No tasks" }) => <div className="p-8 text-center text-slate-500">{msg}</div>;
 
 function PeriodBar({ period, onChange }) {
-  const opts = [{k:"daily",label:"Daily"},{k:"monthly",label:"Monthly"},{k:"yearly",label:"Yearly"},{k:"all",label:"All"}];
+  const opts = [
+    {k:"daily",label:"Daily"},
+    {k:"weekly",label:"Weekly"},        // ← NEW
+    {k:"monthly",label:"Monthly"},
+    {k:"yearly",label:"Yearly"},
+    {k:"all",label:"All"}
+  ];
   return (
     <>
       <div className="mx-auto max-w-6xl mt-2 mb-1 rounded-xl border border-platinum bg-white p-1 shadow-sm">
@@ -64,14 +58,14 @@ function PeriodBar({ period, onChange }) {
           ))}
         </div>
       </div>
-      <div className="mx-auto max-w-6xl mb-2 text-xs text-slate-500">{periodRange(period).label}</div>
+      <div className="mx-auto max-w-6xl mb-2 text-xs text-slate-500">{periodLabel(period)}</div>
     </>
   );
 }
 
 function Row({ r, dateFmt, statusStyle, priorityClass, priorityLabel}) {
   return (
-    <div className="grid grid-cols-[1.6fr_0.6fr_0.4fr_0.8fr_0.4fr] px-5 py-2 items-center border-b border-slate-200 last:border-b-0">
+    <div className="grid grid-cols-[1.6fr_0.6fr_0.6fr_0.6fr_0.4fr] px-5 py-2 items-center border-b border-slate-200 last:border-b-0">
       <div className="min-w-0"><HoverTitle title={r.title} subtitle={r.project ? `Project: ${r.project}` : undefined} /></div>
       <div className="text-sm text-slate-700 text-center">{formatDuration(r.effective_sec)}</div>
       <div><span className={`text-xs px-2 py-1 rounded-md border text-center ${statusStyle(r.status)}`}>{r.status || "—"}</span></div>
@@ -91,7 +85,7 @@ export default function ReportsView() {
   const pageSize = 10;
   const queryDeb = useDebounced(query, 250);
 
-  const [data, setData] = useState({ rows: [], totalCount: 0, page: 1, pageSize, totals: { total_worked_sec: 0, total_paused_sec: 0 } });
+  const [data, setData] = useState({ rows: [], totalCount: 0, page: 1, pageSize, totals: { total_worked_sec: 0, total_paused_sec: 0, total_idle_sec: 0, total_active_sec: 0 } });
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState([]);
   const NO_PROJECT = "__none__";
@@ -107,8 +101,20 @@ export default function ReportsView() {
     (async () => {
       try {
         setLoading(true);
+        // Map UI -> API
+        const periodForApi =
+          period === "daily"   ? "day"  :
+          period === "weekly"  ? "week" :
+          period === "monthly" ? "month":
+          period === "yearly"  ? "year" : "all";
+
         const res = await reportsAPI.list({
-          period, page, pageSize, sort: sortKey, dir,
+          period: periodForApi,
+          page, pageSize, sort: sortKey, dir,
+          idleMode: 'fixed' / 'auto' /'clocked',
+          workStart: '08:00',
+          workEnd: '17:00',
+          idleGraceMin: 10,
           filters: {
             title: queryDeb,
             status: status === "all" ? "" : status,
@@ -161,6 +167,10 @@ export default function ReportsView() {
 
   const totalWorkedSec = Number(data?.totals?.total_worked_sec ?? 0) || items.reduce((s,r)=>s+(+r.effective_sec||0),0);
 
+  // NEW: generic idle across periods
+  const totalIdleSec   = Number(data?.totals?.total_idle_sec ?? data?.totals?.total_pause_day_sec ?? 0);
+  const totalActiveSec = Number(data?.totals?.total_active_sec ?? data?.totals?.total_active_day_sec ?? 0);
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col text-slate-900 overflow-hidden">
       <div className="shrink-0">
@@ -187,7 +197,7 @@ export default function ReportsView() {
       <div className="flex-1 min-h-0 overflow-auto rounded-2xl bg-slate-50">
         <div className="mx-auto max-w-6xl px-4 py-4">
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div className="grid grid-cols-[1.6fr_0.6fr_0.4fr_0.8fr_0.4fr] px-5 py-2 text-sm font-medium text-slate-500 border-b border-slate-200 sticky top-0 bg-white">
+            <div className="grid grid-cols-[1.6fr_0.6fr_0.6fr_0.6fr_0.4fr] px-5 py-2 text-sm font-medium text-slate-500 border-b border-slate-200 sticky top-0 bg-white">
               <HeaderCell label="Title" sortKey="title" sort={sortKey} dir={dir} align="left"
                 onSort={(k)=>setAndReset({ sortKey:k, dir: sortKey===k && dir==="ASC" ? "DESC":"ASC" })} />
               <HeaderCell label="Worked" sortKey="effective_sec" sort={sortKey} dir={dir} align="center"
@@ -217,7 +227,7 @@ export default function ReportsView() {
           <PaginationBar
             totalCount={data.totalCount}
             page={page}
-            pageCount={pageCount}
+            pageCount={Math.max(1, Math.ceil((data?.totalCount ?? 0) / (pageSize || 10)))}
             onChange={(p) => setPage(p)}
           />
         </div>
@@ -227,16 +237,34 @@ export default function ReportsView() {
       <div className="sticky bottom-0 z-20">
         <div className="rounded-2xl mt-3 bg-white/90 backdrop-blur shadow-sm">
           <div className="flex flex-col gap-2 px-4 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-slate-600">Totals for current filters & period</div>
+            <div className="text-sm text-slate-600">
+              Totals for current filters &nbsp;
+              {period === "daily" ? "(today)" : period === "weekly" ? "(this week)" : period === "monthly" ? "(this month)" : period === "yearly" ? "(this year)" : "(all time)"}
+            </div>
+
             <div className="flex justify-end gap-3">
-              <div className="flex items-center gap-2 rounded-xl px-3 py-2">
+              {/* Worked */}
+              <div className="flex items-center gap-2 rounded-xl px-3 py-2" title="Sum of focused (effective) time">
                 <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "#10b981" }} />
                 <div className="text-sm">
                   <div className="font-medium text-slate-800">Total Worked</div>
                   <div className="text-slate-600">{formatDuration(totalWorkedSec)}</div>
                 </div>
               </div>
+
+              {/* Idle (Paused) — now for all periods */}
+              <div
+                className="flex items-center gap-2 rounded-xl px-3 py-2"
+                title="Time with no task running (includes explicit breaks and gaps between focus sessions)."
+              >
+                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: "#64748b" }} />
+                <div className="text-sm">
+                  <div className="font-medium text-slate-800">Total Idle</div>
+                  <div className="text-slate-600">{formatDuration(totalIdleSec)}</div>
+                </div>
+              </div>
             </div>
+
           </div>
         </div>
       </div>

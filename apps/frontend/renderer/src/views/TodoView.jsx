@@ -336,7 +336,7 @@ export default function TodoView({ onPickTask }) {
 
   // Pagination (client-side)
   const [page, setPage] = useState(1);
-  const pageSize = 8;
+  const pageSize = 7;
   useEffect(() => {
     setPage(1);
   }, [status, project, tag, query, sort]);
@@ -676,20 +676,20 @@ export default function TodoView({ onPickTask }) {
             {err ? err : "No tasks match your filters."}
           </div>
         ) : (
-          pageVisible.map((t) => (
+          pageVisible.map((p, idx) => (
             <TaskRow
-              key={t.id}
-              task={t}
-              selected={selected.has(t.id)}
-              onToggleSelected={() => toggleSelect(t.id)}
-              onToggleDone={() => toggleDone(t.id)}
+              key={`page-${p}-${idx}`}
+              task={p}
+              selected={selected.has(p.id)}
+              onToggleSelected={() => toggleSelect(p.id)}
+              onToggleDone={() => toggleDone(p.id)}
               onDelete={handleDelete}
               onPick={onPickTask}
               onEdit={(task) => setEditing(task)}
               onStart={startTask}
               onPause={pauseTask}
               onStop={stopTask}
-              paused={pausedIds.has(t.id)}
+              paused={pausedIds.has(p.id)}
             />
           ))
         )}
