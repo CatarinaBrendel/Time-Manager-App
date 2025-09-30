@@ -466,6 +466,40 @@ function TasksRepo(db) {
     return get(task_id);
   }
 
+  async function listActiveDueTodayOrderedByPriority(db) {
+    // Adjust table/columns to match your schema.
+    // Map priority to numeric for sort: High(3) > Med(2) > Low(1)
+    const sql = `
+      SELECT id, title, status, priority, due_date
+      FROM tasks
+      WHERE status <> 'done'
+        AND (due_date IS NOT NULL AND DATE(due_date) = DATE('now','localtime'))
+        AND (deleted IS NULL OR deleted = 0)
+      ORDER BY 
+        CASE UPPER(priority)
+          WHEN 'URGENT' THEN 4
+          WHEN 'HIGH' THEN 3
+          WHEN 'MED' THEN 2
+          WHEN 'LOW' THEN 1
+          ELSE 0
+        END DESC,
+        title COLLATE NOCASE ASC
+      LIMIT 50;
+    `;
+    return db.prepare(sql).all();
+  }
+
+  async function quickAdd(db, { title, priority, due_date }) {
+    const p = priority ?? 'Med';
+    const due = due_date ?? new Date().toISOString();
+    const stmt = db.prepare(`
+      INSERT INTO tasks (title, status, priority, due_date, created_at)
+      VALUES (?, 'todo', ?, ?, datetime('now'))
+    `);
+    const info = stmt.run(title, p, due);
+    return { id: info.lastInsertRowid, title, priority: p, due_date: due, status: 'todo' };
+  }
+
   return {
     list,
     get,
@@ -476,6 +510,8 @@ function TasksRepo(db) {
     start,
     pause,
     stop,
+    listActiveDueTodayOrderedByPriority,
+    quickAdd
   };
 }
 

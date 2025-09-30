@@ -35,7 +35,7 @@ function initBackend(app, ipcMain) {
     tasks: TasksRepo(db),
     tags: TagsRepo(db),
     projects: ProjectsRepo(db),
-    reports: ReportsRepo(db),
+    reports: ReportsRepo(db)
   };
 
   // Avoid duplicates during hot reload

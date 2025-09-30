@@ -18,6 +18,11 @@ extraResources:
     to: resources/migrations
     filter:
       - "**/*"
+  - from: apps/frontend/electron/build
+    to: icons
+    filter:
+      - tray.png
+      - trayTemplate.png 
 
 asar: true
 asarUnpack:

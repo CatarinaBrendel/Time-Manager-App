@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-console.log('[preload] loaded');
+// Use literals here to avoid bundler path issues
+const CH_LOG_WRITE   = 'log:write';
+const CH_LOG_GETPATH = 'log:getPath';
+const CH_DIAG_EXPORT = 'diagnostics:export';
+
+const appVersion = process?.env?.npm_package_version || '0.0.0-dev';
 
 try {
   contextBridge.exposeInMainWorld('tm', {
@@ -33,6 +38,10 @@ try {
     reports: {
       list: (opts) => ipcRenderer.invoke("tm.reports.list", opts),
     },
+    write: (line) => ipcRenderer.invoke(CH_LOG_WRITE, line),
+    getLogDir: () => ipcRenderer.invoke(CH_LOG_GETPATH),
+    exportDiagnostics: () => ipcRenderer.invoke(CH_DIAG_EXPORT),
+    appVersion,
     _debug: () => 'preload-ok'
   });
   console.log('[preload] exposed window.tm');

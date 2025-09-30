@@ -1,3 +1,5 @@
+import * as log from '../lib/log/logger';
+
 export const projectsAPI = {
   list: async () => {
     try {
@@ -7,6 +9,7 @@ export const projectsAPI = {
       return Array.isArray(res) ? res : [];
     } catch (e) {
       console.warn("projects.list failed:", e);
+      log.warn("projects.list failed:", e);
       return [];
     }
   },
@@ -20,6 +23,7 @@ export const projectsAPI = {
       return Number.isFinite(Number(id)) ? Number(id) : null;
     } catch (e) {
       console.warn("projects.ensure failed:", e);
+      log.error("projects.ensure failed:", e);
       return null;
     }
   },

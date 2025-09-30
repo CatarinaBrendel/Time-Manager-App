@@ -1,4 +1,6 @@
 // make sure these handlers RETURN what repos.* returns
+const log = require("../../util/logger");
+
 function registerTasksIpc(ipcMain, repos) {
   ipcMain.handle('tm.tasks.create', async (_e, payload) => {
     try {
@@ -8,6 +10,7 @@ function registerTasksIpc(ipcMain, repos) {
       return row; // ← important
     } catch (err) {
       console.error('[ipc] tm.tasks.create failed:', err);
+      log.error('[ipc] tm.tasks.create failed:', err);
       throw err;
     }
   });
@@ -18,6 +21,7 @@ function registerTasksIpc(ipcMain, repos) {
       return row; // ← important
     } catch (err) {
       console.error('[ipc] tm.tasks.update failed:', err);
+      log.error('[ipc] tm.tasks.update failed:', err);
       throw err;
     }
   });

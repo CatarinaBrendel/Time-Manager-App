@@ -1,4 +1,6 @@
 // electron/main/ipc/reportsIpc.js
+const log = require("../../util/logger");
+
 function registerReportsIpc(ipcMain, repos) {
   ipcMain.handle('tm.reports.list', async (_e, opts = {}) => {
     try {
@@ -6,6 +8,7 @@ function registerReportsIpc(ipcMain, repos) {
       return result; // important: return to renderer
     } catch (err) {
       console.error('[ipc] tm.reports.list failed:', err);
+      log.error('[ipc] tm.reports.list failed:', err);
       throw err; // let renderer get the failure
     }
   });
